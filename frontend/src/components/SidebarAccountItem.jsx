@@ -45,8 +45,8 @@ const SidebarAccountItem = ({ account, isSelected, onSelect, onEdit, onDelete })
           onClick={() => onSelect(account.id)}
           className="flex-1 truncate text-left text-sm font-medium focus:outline-none"
         >
-          <div className="truncate font-semibold text-slate-100">{account.label}</div>
-          <div className="truncate text-xs text-slate-400">{account.netflix_email}</div>
+          <div className="truncate font-semibold text-slate-100">{account.netflix_email}</div>
+          <div className="truncate text-xs text-slate-400">{account.label}</div>
         </button>
         <div className="ml-3 flex items-center space-x-1 opacity-0 transition group-hover:opacity-100">
           <button

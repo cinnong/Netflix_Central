@@ -38,18 +38,4 @@ export async function openAccount(id) {
   return request(`/accounts/${id}/open`, { method: 'POST' });
 }
 
-export async function fetchTabs(accountId) {
-  return request(`/accounts/${accountId}/tabs`);
-}
-
-export async function createTab(accountId, payload) {
-  return request(`/accounts/${accountId}/tabs`, { method: 'POST', body: JSON.stringify(payload) });
-}
-
-export async function updateTab(accountId, tabId, payload) {
-  return request(`/accounts/${accountId}/tabs/${tabId}`, { method: 'PUT', body: JSON.stringify(payload) });
-}
-
-export async function deleteTab(accountId, tabId) {
-  return request(`/accounts/${accountId}/tabs/${tabId}`, { method: 'DELETE' });
-}
+// Tab endpoints tidak dipakai lagi di UI, tetapi bisa ditambahkan kembali jika diperlukan.

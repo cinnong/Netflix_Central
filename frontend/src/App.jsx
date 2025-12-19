@@ -1,27 +1,28 @@
 import { useEffect, useMemo, useState } from 'react'
-import Sidebar from './components/Sidebar'
-import TabBar from './components/TabBar'
-import MainContent from './components/MainContent'
+import Swal from 'sweetalert2'
 import Modal from './components/Modal'
-import {
-  createAccount,
-  createTab,
-  deleteAccount,
-  deleteTab,
-  fetchAccounts,
-  fetchTabs,
-  openAccount,
-  updateAccount,
-  updateTab,
-} from './api'
+import { createAccount, deleteAccount, fetchAccounts, openAccount, updateAccount } from './api'
+
+const applyThemeClass = (mode) => {
+  const isDark = mode === 'dark'
+  const root = document.documentElement
+  const body = document.body
+  root.classList.toggle('dark', isDark)
+  body?.classList.toggle('dark', isDark)
+  root.style.colorScheme = isDark ? 'dark' : 'light'
+}
 
 function App() {
   const [accounts, setAccounts] = useState([])
   const [selectedAccountId, setSelectedAccountId] = useState(null)
-  const [tabs, setTabs] = useState([])
-  const [activeTabId, setActiveTabId] = useState(null)
   const [searchValue, setSearchValue] = useState('')
   const [loading, setLoading] = useState(false)
+  const [theme, setTheme] = useState(() => {
+    const stored = localStorage.getItem('theme')
+    const initial = stored === 'dark' ? 'dark' : 'light'
+    applyThemeClass(initial)
+    return initial
+  })
 
   const [modalState, setModalState] = useState({ type: null, payload: null, version: 0 })
 
@@ -40,32 +41,37 @@ function App() {
     load()
   }, [])
 
+  useEffect(() => {
+    localStorage.setItem('theme', theme)
+    applyThemeClass(theme)
+  }, [theme])
+
   const filteredAccounts = useMemo(() => {
     if (!Array.isArray(accounts)) return []
     const trimmed = searchValue.trim().toLowerCase()
-    if (!trimmed) return accounts
-    return accounts.filter((account) => account.netflix_email.toLowerCase().includes(trimmed))
+    const list = trimmed
+      ? accounts.filter((account) => account.netflix_email.toLowerCase().includes(trimmed))
+      : accounts
+
+    return [...list].sort((a, b) => a.netflix_email.localeCompare(b.netflix_email))
   }, [accounts, searchValue])
 
-  const selectedAccount = useMemo(
-    () => (Array.isArray(accounts) ? accounts.find((account) => account.id === selectedAccountId) : null),
-    [accounts, selectedAccountId],
-  )
+  const groupedAccounts = useMemo(() => {
+    const groups = {}
+    filteredAccounts.forEach((account) => {
+      const first = account.netflix_email?.trim()?.[0] || '#'
+      const letter = /^[a-zA-Z]$/.test(first) ? first.toUpperCase() : '#'
+      if (!groups[letter]) groups[letter] = []
+      groups[letter].push(account)
+    })
 
-  const loadTabs = async (accountId) => {
-    if (!accountId) return
-    try {
-      const fetchedTabs = await fetchTabs(accountId)
-      setTabs(fetchedTabs)
-      setActiveTabId(fetchedTabs[0]?.id ?? null)
-    } catch (error) {
-      console.error(error)
-    }
-  }
+    return Object.entries(groups)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([letter, list]) => ({ letter, list }))
+  }, [filteredAccounts])
 
   const handleSelectAccount = async (accountId) => {
     setSelectedAccountId(accountId)
-    await loadTabs(accountId)
     try {
       await openAccount(accountId)
     } catch (error) {
@@ -74,62 +80,33 @@ function App() {
     }
   }
 
-  const handleSelectTab = (tabId) => setActiveTabId(tabId)
-
-  const handleCloseTab = async (tabId) => {
-    if (!selectedAccountId) return
-    try {
-      await deleteTab(selectedAccountId, tabId)
-      setTabs((prev) => {
-        const updated = prev.filter((tab) => tab.id !== tabId)
-        if (activeTabId === tabId) {
-          const idx = prev.findIndex((tab) => tab.id === tabId)
-          const next = updated[idx] || updated[idx - 1] || null
-          setActiveTabId(next ? next.id : null)
-        }
-        return updated
-      })
-    } catch (error) {
-      console.error(error)
-    }
-  }
-
-  const launchInChrome = async () => {
-    if (!selectedAccountId) return
-    try {
-      await openAccount(selectedAccountId)
-    } catch (error) {
-      console.error(error)
-      alert('Unable to launch Chrome for this account. Ensure Chrome is installed.')
-    }
-  }
-
-  const handleAddTab = () => setModalState({ type: 'add-tab', payload: null, version: Date.now() })
-
-  const handleEditTab = (tabId) => {
-    const tab = tabs.find((item) => item.id === tabId)
-    if (!tab) return
-    setModalState({ type: 'edit-tab', payload: tab, version: Date.now() })
-  }
-
   const handleAddAccount = () => setModalState({ type: 'add-account', payload: null, version: Date.now() })
 
   const handleEditAccount = (account) => setModalState({ type: 'edit-account', payload: account, version: Date.now() })
 
   const handleDeleteAccount = async (accountId) => {
+    const result = await Swal.fire({
+      title: 'Hapus akun?',
+      text: 'Profil Chrome akun ini tetap ada di disk sampai dihapus manual.',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: 'Ya, hapus',
+      cancelButtonText: 'Batal',
+      confirmButtonColor: '#e11d48',
+    })
+    if (!result.isConfirmed) return
+
     try {
       await deleteAccount(accountId)
       setAccounts((prev) => prev.filter((account) => account.id !== accountId))
       if (selectedAccountId === accountId) {
         setSelectedAccountId(null)
-        setTabs([])
-        setActiveTabId(null)
       }
+      Swal.fire({ title: 'Terhapus', text: 'Akun berhasil dihapus.', icon: 'success', timer: 1400, showConfirmButton: false })
     } catch (error) {
       console.error(error)
     }
   }
-
   const closeModal = () => setModalState({ type: null, payload: null, version: Date.now() })
 
   const submitAccountModal = async (values) => {
@@ -140,6 +117,7 @@ function App() {
         const created = await createAccount(payload)
         setAccounts((prev) => [created, ...prev])
         setSearchValue('')
+        Swal.fire({ title: 'Berhasil', text: 'Akun ditambahkan.', icon: 'success', timer: 1400, showConfirmButton: false })
       }
 
       if (modalState.type === 'edit-account' && modalState.payload) {
@@ -148,6 +126,7 @@ function App() {
         if (selectedAccountId === updated.id) {
           setSelectedAccountId(updated.id)
         }
+        Swal.fire({ title: 'Tersimpan', text: 'Akun diperbarui.', icon: 'success', timer: 1400, showConfirmButton: false })
       }
     } catch (error) {
       console.error(error)
@@ -157,55 +136,139 @@ function App() {
     }
   }
 
-  const submitTabModal = async (values) => {
-    if (!selectedAccountId) return
-    const payload = { title: values.title?.trim() || 'New Tab', url: values.url?.trim() }
-
-    try {
-      if (modalState.type === 'add-tab') {
-        const created = await createTab(selectedAccountId, payload)
-        setTabs((prev) => [...prev, created])
-        setActiveTabId(created.id)
-      }
-
-      if (modalState.type === 'edit-tab' && modalState.payload) {
-        const updated = await updateTab(selectedAccountId, modalState.payload.id, payload)
-        setTabs((prev) => prev.map((tab) => (tab.id === updated.id ? updated : tab)))
-      }
-    } catch (error) {
-      console.error(error)
-      alert('Tab save failed. Please try again.')
-    } finally {
-      closeModal()
-    }
+  const toggleTheme = () => {
+    setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'))
   }
 
-  const activeTab = tabs.find((tab) => tab.id === activeTabId) || null
+  const validateAccountForm = (values) => {
+    const errors = {}
+    const email = values.netflix_email?.trim().toLowerCase()
+    const isDuplicate = email
+      ? accounts.some(
+          (account) =>
+            account.netflix_email?.toLowerCase() === email &&
+            (modalState.type === 'add-account' || account.id !== modalState.payload?.id),
+        )
+      : false
+
+    if (!email) {
+      errors.netflix_email = 'Email wajib diisi.'
+    } else if (isDuplicate) {
+      errors.netflix_email = 'Email sudah ada, tidak boleh duplikat.'
+    }
+
+    return errors
+  }
 
   return (
-    <div className="flex min-h-screen bg-slate-100">
-      <Sidebar
-        accounts={filteredAccounts}
-        selectedAccountId={selectedAccountId}
-        searchValue={searchValue}
-        onSearchChange={setSearchValue}
-        onSelectAccount={handleSelectAccount}
-        onAddAccount={handleAddAccount}
-        onEditAccount={handleEditAccount}
-        onDeleteAccount={handleDeleteAccount}
-        loading={loading}
-      />
-      <div className="flex min-h-screen flex-1 flex-col">
-        <TabBar
-          tabs={tabs}
-          activeTabId={activeTabId}
-          selectedAccountLabel={selectedAccount?.label ?? ''}
-          onSelectTab={handleSelectTab}
-          onCloseTab={handleCloseTab}
-          onAddTab={handleAddTab}
-          onEditTab={handleEditTab}
-        />
-        <MainContent account={selectedAccount} activeTab={activeTab} onLaunchAccount={launchInChrome} />
+    <div className={theme === 'dark' ? 'dark' : ''}>
+      <div className="min-h-screen bg-slate-100 px-3 py-10 transition-colors dark:bg-slate-900">
+        <div className="mx-auto flex max-w-7xl flex-col items-center gap-6">
+          <div className="flex w-full flex-col items-center gap-3 text-center">
+            <div className="flex w-full max-w-6xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex-1 text-center sm:text-center">
+                <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-100">Netflix Accounts</h1>
+                <p className="text-sm text-slate-500 dark:text-slate-400">Klik akun untuk membuka Chrome dengan sesi tersimpan.</p>
+              </div>
+              <button
+                type="button"
+                onClick={toggleTheme}
+                className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+              >
+                {theme === 'dark' ? (
+                  <>
+                    <span aria-hidden="true">☀️</span>
+                    <span>Light</span>
+                  </>
+                ) : (
+                  <>
+                    <span aria-hidden="true">🌙</span>
+                    <span>Dark</span>
+                  </>
+                )}
+              </button>
+            </div>
+            <div className="flex w-full max-w-xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-center">
+              <input
+                value={searchValue}
+                onChange={(e) => setSearchValue(e.target.value)}
+                placeholder="Cari berdasarkan email"
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 shadow-inner focus:border-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-300 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:shadow-none"
+              />
+              <button
+                type="button"
+                onClick={handleAddAccount}
+                className="inline-flex items-center justify-center rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-700 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-200"
+              >
+                Add Account
+              </button>
+            </div>
+          </div>
+
+          <div className="w-full max-w-7xl space-y-6">
+            {loading && <div className="text-center text-sm text-slate-500 dark:text-slate-400">Loading...</div>}
+            {!loading && groupedAccounts.length === 0 && (
+              <div className="text-center text-sm text-slate-500 dark:text-slate-400">Belum ada akun.</div>
+            )}
+
+            {!loading &&
+              groupedAccounts.map(({ letter, list }) => (
+                <div key={letter} className="space-y-3">
+                  <div className="flex items-center gap-3">
+                    <div className="h-px flex-1 bg-slate-200 dark:bg-slate-700" />
+                    <div className="flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white text-sm font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100">
+                      {letter}
+                    </div>
+                    <div className="h-px flex-1 bg-slate-200 dark:bg-slate-700" />
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                    {list.map((account) => (
+                      <div
+                        key={account.id}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => handleSelectAccount(account.id)}
+                        className="group cursor-pointer rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-slate-400/60 dark:border-slate-700 dark:bg-slate-800 dark:focus:ring-slate-600/60"
+                      >
+                        <div className="w-full text-left">
+                          <div className="truncate text-base font-semibold text-slate-900 dark:text-slate-100">{account.netflix_email}</div>
+                          <div className="truncate text-sm text-slate-500 dark:text-slate-400">{account.label}</div>
+                        </div>
+                        <div className="mt-3 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
+                          <span>Click to launch Chrome</span>
+                          <div className="flex gap-2">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleEditAccount(account)
+                              }}
+                              aria-label="Edit account"
+                              className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 text-base text-slate-600 transition hover:bg-slate-100 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-700"
+                            >
+                              ✏️
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleDeleteAccount(account.id)
+                              }}
+                              aria-label="Delete account"
+                              className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-rose-200 text-base text-rose-600 transition hover:bg-rose-50 dark:border-rose-400/40 dark:text-rose-300 dark:hover:bg-rose-500/10"
+                            >
+                              🗑️
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+          </div>
+        </div>
       </div>
 
       <Modal
@@ -223,23 +286,7 @@ function App() {
         }}
         onClose={closeModal}
         onSubmit={submitAccountModal}
-      />
-
-      <Modal
-        key={`tab-modal-${modalState.version}`}
-        isOpen={modalState.type === 'add-tab' || modalState.type === 'edit-tab'}
-        title={modalState.type === 'edit-tab' ? 'Edit Tab' : 'Add Tab'}
-        description={modalState.type === 'edit-tab' ? 'Update the title or URL for this tab.' : 'Create a new custom tab.'}
-        fields={[
-          { name: 'title', label: 'Tab Title', placeholder: 'My Dashboard' },
-          { name: 'url', label: 'URL', placeholder: 'https://example.com' },
-        ]}
-        initialValues={{
-          title: modalState.payload?.title ?? '',
-          url: modalState.payload?.url ?? '',
-        }}
-        onClose={closeModal}
-        onSubmit={submitTabModal}
+        onValidate={validateAccountForm}
       />
     </div>
   )
