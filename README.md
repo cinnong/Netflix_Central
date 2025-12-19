@@ -28,6 +28,14 @@ Lalu buka alamat yang ditampilkan (biasanya http://localhost:5173).
 - Ikon ✏️ untuk edit, 🗑️ untuk hapus; toggle light/dark ada di header.
 - Abaikan "Sign in to Chrome"; login ke Netflix sekali, lalu sesi tersimpan.
 
+## Jalankan backend otomatis (Windows)
+- Buka PowerShell, jalankan: `./scripts/install_backend.ps1` (butuh Go terpasang). Ini build `netflix-central.exe`, daftar sebagai Scheduled Task, dan menyalakan backend di startup.
+
+## Deploy frontend di Netlify
+- Set env: `VITE_API_BASE=http://localhost:8080` (backend tetap lokal di PC pengguna).
+- Build command: `npm run build` · Publish directory: `dist`.
+- Pastikan backend berjalan di PC saat membuka situs Netlify; CORS sudah terbuka.
+
 ## Lokasi data
 - Database SQLite: `database/app.db`
 - Profil Chrome per akun: `chrome_profiles/<nama-profil>` (otomatis dibuat). Jangan hapus jika ingin sesi tetap ada.
