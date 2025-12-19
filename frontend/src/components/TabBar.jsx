@@ -3,7 +3,7 @@ import TabItem from './TabItem'
 const TabBar = ({
   tabs,
   activeTabId,
-  selectedAccountEmail,
+  selectedAccountLabel,
   onSelectTab,
   onCloseTab,
   onAddTab,
@@ -15,7 +15,7 @@ const TabBar = ({
         <div>
           <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Active Account</p>
           <p className="text-sm font-semibold text-slate-700">
-            {selectedAccountEmail || 'No account selected'}
+            {selectedAccountLabel || 'No account selected'}
           </p>
         </div>
         <button

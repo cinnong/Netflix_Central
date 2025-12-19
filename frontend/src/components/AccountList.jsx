@@ -1,6 +1,14 @@
 import SidebarAccountItem from './SidebarAccountItem'
 
-const AccountList = ({ accounts, selectedAccountId, onSelectAccount, onEditAccount, onDeleteAccount }) => {
+const AccountList = ({ accounts, selectedAccountId, onSelectAccount, onEditAccount, onDeleteAccount, loading }) => {
+  if (loading) {
+    return (
+      <div className="px-4 text-sm text-slate-500">
+        <p>Loading accounts…</p>
+      </div>
+    )
+  }
+
   if (!accounts.length) {
     return (
       <div className="px-4 text-sm text-slate-500">

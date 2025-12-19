@@ -1,181 +1,186 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Sidebar from './components/Sidebar'
 import TabBar from './components/TabBar'
 import MainContent from './components/MainContent'
 import Modal from './components/Modal'
-
-const BASE_TABS = [
-  { title: 'Account', url: 'https://www.netflix.com/account' },
-  { title: 'Password', url: 'https://www.netflix.com/password' },
-  { title: 'Login Help', url: 'https://www.netflix.com/id/loginhelp' },
-  { title: 'Gmail', url: 'https://mail.google.com/mail/u/0/?view=cm&fs=1&to=' },
-  { title: 'TV2', url: 'https://www.netflix.com/tv2' },
-]
-
-const INITIAL_ACCOUNTS = [
-  { id: 'acc-1', email: 'dina1@gmail.com' },
-  { id: 'acc-2', email: 'dina2@gmail.com' },
-  { id: 'acc-3', email: 'dina3@gmail.com' },
-]
-
-const buildAccountTabs = (email) =>
-  BASE_TABS.map((tab, index) => ({
-    id: `${tab.title.toLowerCase().replace(/\s+/g, '-')}-${index}`,
-    title: tab.title,
-    url: tab.title === 'Gmail' ? `${tab.url}${email}` : tab.url,
-  }))
+import {
+  createAccount,
+  createTab,
+  deleteAccount,
+  deleteTab,
+  fetchAccounts,
+  fetchTabs,
+  openAccount,
+  updateAccount,
+  updateTab,
+} from './api'
 
 function App() {
-  const [accounts, setAccounts] = useState(INITIAL_ACCOUNTS)
-  const [selectedAccountId, setSelectedAccountId] = useState('')
+  const [accounts, setAccounts] = useState([])
+  const [selectedAccountId, setSelectedAccountId] = useState(null)
   const [tabs, setTabs] = useState([])
-  const [activeTabId, setActiveTabId] = useState('')
+  const [activeTabId, setActiveTabId] = useState(null)
   const [searchValue, setSearchValue] = useState('')
+  const [loading, setLoading] = useState(false)
 
-  const [modalState, setModalState] = useState({
-    type: null,
-    payload: null,
-    version: 0,
-  })
+  const [modalState, setModalState] = useState({ type: null, payload: null, version: 0 })
+
+  useEffect(() => {
+    const load = async () => {
+      setLoading(true)
+      try {
+        const data = await fetchAccounts()
+        setAccounts(Array.isArray(data) ? data : [])
+      } catch (error) {
+        console.error(error)
+      } finally {
+        setLoading(false)
+      }
+    }
+    load()
+  }, [])
 
   const filteredAccounts = useMemo(() => {
+    if (!Array.isArray(accounts)) return []
     const trimmed = searchValue.trim().toLowerCase()
-    if (!trimmed) {
-      return accounts
-    }
-    return accounts.filter((account) => account.email.toLowerCase().includes(trimmed))
+    if (!trimmed) return accounts
+    return accounts.filter((account) => account.netflix_email.toLowerCase().includes(trimmed))
   }, [accounts, searchValue])
 
   const selectedAccount = useMemo(
-    () => accounts.find((account) => account.id === selectedAccountId) || null,
+    () => (Array.isArray(accounts) ? accounts.find((account) => account.id === selectedAccountId) : null),
     [accounts, selectedAccountId],
   )
 
-  const resetTabsForAccount = (account) => {
-    if (!account) {
-      setTabs([])
-      setActiveTabId('')
-      return
+  const loadTabs = async (accountId) => {
+    if (!accountId) return
+    try {
+      const fetchedTabs = await fetchTabs(accountId)
+      setTabs(fetchedTabs)
+      setActiveTabId(fetchedTabs[0]?.id ?? null)
+    } catch (error) {
+      console.error(error)
     }
-    const generatedTabs = buildAccountTabs(account.email)
-    setTabs(generatedTabs)
-    setActiveTabId(generatedTabs[0]?.id ?? '')
   }
 
-  const handleSelectAccount = (accountId) => {
-    const account = accounts.find((item) => item.id === accountId) || null
+  const handleSelectAccount = async (accountId) => {
     setSelectedAccountId(accountId)
-    resetTabsForAccount(account)
+    await loadTabs(accountId)
+    try {
+      await openAccount(accountId)
+    } catch (error) {
+      console.error(error)
+      alert('Unable to launch Chrome for this account. Ensure Chrome is installed.')
+    }
   }
 
-  const handleSelectTab = (tabId) => {
-    setActiveTabId(tabId)
+  const handleSelectTab = (tabId) => setActiveTabId(tabId)
+
+  const handleCloseTab = async (tabId) => {
+    if (!selectedAccountId) return
+    try {
+      await deleteTab(selectedAccountId, tabId)
+      setTabs((prev) => {
+        const updated = prev.filter((tab) => tab.id !== tabId)
+        if (activeTabId === tabId) {
+          const idx = prev.findIndex((tab) => tab.id === tabId)
+          const next = updated[idx] || updated[idx - 1] || null
+          setActiveTabId(next ? next.id : null)
+        }
+        return updated
+      })
+    } catch (error) {
+      console.error(error)
+    }
   }
 
-  const handleCloseTab = (tabId) => {
-    setTabs((prevTabs) => {
-      const index = prevTabs.findIndex((tab) => tab.id === tabId)
-      if (index === -1) {
-        return prevTabs
-      }
-      const updated = prevTabs.filter((tab) => tab.id !== tabId)
-      if (tabId === activeTabId) {
-        const nextTab = updated[index] || updated[index - 1] || null
-        setActiveTabId(nextTab ? nextTab.id : '')
-      }
-      return updated
-    })
+  const launchInChrome = async () => {
+    if (!selectedAccountId) return
+    try {
+      await openAccount(selectedAccountId)
+    } catch (error) {
+      console.error(error)
+      alert('Unable to launch Chrome for this account. Ensure Chrome is installed.')
+    }
   }
 
-  const handleAddTab = () => {
-    setModalState({ type: 'add-tab', payload: null, version: Date.now() })
-  }
+  const handleAddTab = () => setModalState({ type: 'add-tab', payload: null, version: Date.now() })
 
   const handleEditTab = (tabId) => {
     const tab = tabs.find((item) => item.id === tabId)
-    if (!tab) {
-      return
-    }
+    if (!tab) return
     setModalState({ type: 'edit-tab', payload: tab, version: Date.now() })
   }
 
+  const handleAddAccount = () => setModalState({ type: 'add-account', payload: null, version: Date.now() })
+
+  const handleEditAccount = (account) => setModalState({ type: 'edit-account', payload: account, version: Date.now() })
+
+  const handleDeleteAccount = async (accountId) => {
+    try {
+      await deleteAccount(accountId)
+      setAccounts((prev) => prev.filter((account) => account.id !== accountId))
+      if (selectedAccountId === accountId) {
+        setSelectedAccountId(null)
+        setTabs([])
+        setActiveTabId(null)
+      }
+    } catch (error) {
+      console.error(error)
+    }
+  }
+
+  const closeModal = () => setModalState({ type: null, payload: null, version: Date.now() })
+
+  const submitAccountModal = async (values) => {
+    const payload = { label: values.label?.trim(), netflix_email: values.netflix_email?.trim() }
+
+    try {
+      if (modalState.type === 'add-account') {
+        const created = await createAccount(payload)
+        setAccounts((prev) => [created, ...prev])
+        setSearchValue('')
+      }
+
+      if (modalState.type === 'edit-account' && modalState.payload) {
+        const updated = await updateAccount(modalState.payload.id, payload)
+        setAccounts((prev) => prev.map((account) => (account.id === updated.id ? updated : account)))
+        if (selectedAccountId === updated.id) {
+          setSelectedAccountId(updated.id)
+        }
+      }
+    } catch (error) {
+      console.error(error)
+      alert('Account save failed. Please try again.')
+    } finally {
+      closeModal()
+    }
+  }
+
+  const submitTabModal = async (values) => {
+    if (!selectedAccountId) return
+    const payload = { title: values.title?.trim() || 'New Tab', url: values.url?.trim() }
+
+    try {
+      if (modalState.type === 'add-tab') {
+        const created = await createTab(selectedAccountId, payload)
+        setTabs((prev) => [...prev, created])
+        setActiveTabId(created.id)
+      }
+
+      if (modalState.type === 'edit-tab' && modalState.payload) {
+        const updated = await updateTab(selectedAccountId, modalState.payload.id, payload)
+        setTabs((prev) => prev.map((tab) => (tab.id === updated.id ? updated : tab)))
+      }
+    } catch (error) {
+      console.error(error)
+      alert('Tab save failed. Please try again.')
+    } finally {
+      closeModal()
+    }
+  }
+
   const activeTab = tabs.find((tab) => tab.id === activeTabId) || null
-
-  const handleAddAccount = () => {
-    setModalState({ type: 'add-account', payload: null, version: Date.now() })
-  }
-
-  const handleEditAccount = (account) => {
-    setModalState({ type: 'edit-account', payload: account, version: Date.now() })
-  }
-
-  const handleDeleteAccount = (accountId) => {
-    setAccounts((prev) => prev.filter((account) => account.id !== accountId))
-    if (selectedAccountId === accountId) {
-      setSelectedAccountId('')
-      resetTabsForAccount(null)
-    }
-  }
-
-  const closeModal = () => {
-    setModalState({ type: null, payload: null, version: Date.now() })
-  }
-
-  const submitAccountModal = (values) => {
-    if (modalState.type === 'add-account') {
-      const newAccount = {
-        id: `acc-${Date.now()}`,
-        email: values.email.trim(),
-      }
-      setAccounts((prev) => [...prev, newAccount])
-      setSearchValue('')
-      closeModal()
-      return
-    }
-
-    if (modalState.type === 'edit-account' && modalState.payload) {
-      const updatedEmail = values.email.trim()
-      setAccounts((prev) =>
-        prev.map((account) =>
-          account.id === modalState.payload.id
-            ? { ...account, email: updatedEmail }
-            : account,
-        ),
-      )
-
-      if (selectedAccountId === modalState.payload.id) {
-        const regeneratedTabs = buildAccountTabs(updatedEmail)
-        setTabs(regeneratedTabs)
-        setActiveTabId(regeneratedTabs[0]?.id ?? '')
-      }
-
-      closeModal()
-    }
-  }
-
-  const submitTabModal = (values) => {
-    if (modalState.type === 'add-tab') {
-      const newTab = {
-        id: `custom-tab-${Date.now()}`,
-        title: values.title.trim() || 'New Tab',
-        url: values.url.trim(),
-      }
-      setTabs((prev) => [...prev, newTab])
-      setActiveTabId(newTab.id)
-      closeModal()
-      return
-    }
-
-    if (modalState.type === 'edit-tab' && modalState.payload) {
-      const updatedTab = {
-        ...modalState.payload,
-        title: values.title.trim() || 'New Tab',
-        url: values.url.trim(),
-      }
-      setTabs((prev) => prev.map((tab) => (tab.id === updatedTab.id ? updatedTab : tab)))
-      closeModal()
-    }
-  }
 
   return (
     <div className="flex min-h-screen bg-slate-100">
@@ -188,27 +193,34 @@ function App() {
         onAddAccount={handleAddAccount}
         onEditAccount={handleEditAccount}
         onDeleteAccount={handleDeleteAccount}
+        loading={loading}
       />
       <div className="flex min-h-screen flex-1 flex-col">
         <TabBar
           tabs={tabs}
           activeTabId={activeTabId}
-          selectedAccountEmail={selectedAccount?.email ?? ''}
+          selectedAccountLabel={selectedAccount?.label ?? ''}
           onSelectTab={handleSelectTab}
           onCloseTab={handleCloseTab}
           onAddTab={handleAddTab}
           onEditTab={handleEditTab}
         />
-        <MainContent activeTab={activeTab} />
+        <MainContent account={selectedAccount} activeTab={activeTab} onLaunchAccount={launchInChrome} />
       </div>
 
       <Modal
         key={`account-modal-${modalState.version}`}
         isOpen={modalState.type === 'add-account' || modalState.type === 'edit-account'}
         title={modalState.type === 'edit-account' ? 'Edit Account' : 'Add Account'}
-        description={modalState.type === 'edit-account' ? 'Update the email for this Netflix account.' : 'Add a new Netflix account email.'}
-        fields={[{ name: 'email', label: 'Email', placeholder: 'name@example.com' }]}
-        initialValues={{ email: modalState.payload?.email ?? '' }}
+        description={modalState.type === 'edit-account' ? 'Update the label or Netflix email for this account.' : 'Add a new Netflix account with a friendly label.'}
+        fields={[
+          { name: 'label', label: 'Label', placeholder: 'Netflix Family 1' },
+          { name: 'netflix_email', label: 'Netflix Email', placeholder: 'name@example.com' },
+        ]}
+        initialValues={{
+          label: modalState.payload?.label ?? '',
+          netflix_email: modalState.payload?.netflix_email ?? '',
+        }}
         onClose={closeModal}
         onSubmit={submitAccountModal}
       />

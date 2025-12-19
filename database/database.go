@@ -1,17 +1,15 @@
 package database
 
 import (
+	"database/sql"
 	"log"
 	"os"
 	"path/filepath"
 
-	"github.com/glebarez/sqlite"
-	"gorm.io/gorm"
-
-	"netflix_central/models"
+	_ "github.com/mattn/go-sqlite3"
 )
 
-var DB *gorm.DB
+var db *sql.DB
 
 func InitDB() {
 	dbDir := "database"
@@ -31,18 +29,53 @@ func InitDB() {
 		}
 	}
 
-	db, err := gorm.Open(sqlite.Open(dbPath), &gorm.Config{})
+	sqlDB, err := sql.Open("sqlite3", dbPath)
 	if err != nil {
-		log.Fatalf("failed to connect database: %v", err)
+		log.Fatalf("failed to open database: %v", err)
 	}
 
-	if err := db.AutoMigrate(&models.Account{}); err != nil {
-		log.Fatalf("failed to migrate database: %v", err)
+	if _, err := sqlDB.Exec("PRAGMA foreign_keys=ON;"); err != nil {
+		log.Printf("warning: failed to enable foreign keys: %v", err)
 	}
 
-	DB = db
+	if _, err := sqlDB.Exec("PRAGMA journal_mode=WAL;"); err != nil {
+		log.Printf("warning: failed to enable WAL mode: %v", err)
+	}
+
+	if _, err := sqlDB.Exec(accountsSchema); err != nil {
+		log.Fatalf("failed to apply accounts schema: %v", err)
+	}
+
+	if _, err := sqlDB.Exec(tabsSchema); err != nil {
+		log.Fatalf("failed to apply tabs schema: %v", err)
+	}
+
+	db = sqlDB
 }
 
-func GetDB() *gorm.DB {
-	return DB
+func GetDB() *sql.DB {
+	return db
 }
+
+const accountsSchema = `
+CREATE TABLE IF NOT EXISTS accounts (
+	id INTEGER PRIMARY KEY AUTOINCREMENT,
+	label TEXT NOT NULL,
+	netflix_email TEXT NOT NULL,
+	chrome_profile TEXT NOT NULL UNIQUE,
+	created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+`
+
+const tabsSchema = `
+CREATE TABLE IF NOT EXISTS tabs (
+	id INTEGER PRIMARY KEY AUTOINCREMENT,
+	account_id INTEGER NOT NULL,
+	title TEXT NOT NULL,
+	url TEXT NOT NULL,
+	position INTEGER NOT NULL,
+	FOREIGN KEY(account_id) REFERENCES accounts(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_tabs_account_id ON tabs(account_id);
+`

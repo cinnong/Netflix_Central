@@ -1,39 +1,25 @@
 package controllers
 
 import (
-	"errors"
-	"fmt"
+	"database/sql"
 	"net/http"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
-	"gorm.io/gorm"
 
 	"netflix_central/database"
-	"netflix_central/models"
 	"netflix_central/services"
 )
 
-/*
-Example JSON input for POST /accounts and PUT /accounts/:id:
-{
-   "email": "akunA@gmail.com",
-   "display_name": "Akun A",
-   "netflix_profile_name": "Profile A",
-   "gmail_index": 0
-}
-*/
-
-type AccountInput struct {
-	Email              string `json:"email" binding:"required,email"`
-	DisplayName        string `json:"display_name" binding:"required"`
-	NetflixProfileName string `json:"netflix_profile_name" binding:"required"`
-	GmailIndex         int    `json:"gmail_index" binding:"required"`
+type accountPayload struct {
+	Label        string `json:"label" binding:"required"`
+	NetflixEmail string `json:"netflix_email" binding:"required,email"`
 }
 
 func GetAccounts(c *gin.Context) {
-	var accounts []models.Account
-	if err := database.GetDB().Find(&accounts).Error; err != nil {
+	ctx := c.Request.Context()
+	accounts, err := services.ListAccounts(ctx, database.GetDB())
+	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -41,55 +27,59 @@ func GetAccounts(c *gin.Context) {
 }
 
 func CreateAccount(c *gin.Context) {
-	var input AccountInput
-	if err := c.ShouldBindJSON(&input); err != nil {
+	var payload accountPayload
+	if err := c.ShouldBindJSON(&payload); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	account := models.Account{
-		Email:              input.Email,
-		DisplayName:        input.DisplayName,
-		NetflixProfileName: input.NetflixProfileName,
-		GmailIndex:         input.GmailIndex,
-	}
-
-	if err := database.GetDB().Create(&account).Error; err != nil {
+	account, err := services.CreateAccount(c.Request.Context(), database.GetDB(), payload.Label, payload.NetflixEmail)
+	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-
 	c.JSON(http.StatusCreated, account)
 }
 
 func GetAccountByID(c *gin.Context) {
-	account, err := fetchAccountByID(c.Param("id"))
+	id, err := parseID(c.Param("id"))
 	if err != nil {
-		handleAccountError(c, err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid account id"})
 		return
 	}
+
+	account, err := services.GetAccount(c.Request.Context(), database.GetDB(), id)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			c.JSON(http.StatusNotFound, gin.H{"error": "account not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
 	c.JSON(http.StatusOK, account)
 }
 
 func UpdateAccount(c *gin.Context) {
-	account, err := fetchAccountByID(c.Param("id"))
+	id, err := parseID(c.Param("id"))
 	if err != nil {
-		handleAccountError(c, err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid account id"})
 		return
 	}
 
-	var input AccountInput
-	if err := c.ShouldBindJSON(&input); err != nil {
+	var payload accountPayload
+	if err := c.ShouldBindJSON(&payload); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	account.Email = input.Email
-	account.DisplayName = input.DisplayName
-	account.NetflixProfileName = input.NetflixProfileName
-	account.GmailIndex = input.GmailIndex
-
-	if err := database.GetDB().Save(account).Error; err != nil {
+	account, err := services.UpdateAccount(c.Request.Context(), database.GetDB(), id, payload.Label, payload.NetflixEmail)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			c.JSON(http.StatusNotFound, gin.H{"error": "account not found"})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -98,13 +88,17 @@ func UpdateAccount(c *gin.Context) {
 }
 
 func DeleteAccount(c *gin.Context) {
-	account, err := fetchAccountByID(c.Param("id"))
+	id, err := parseID(c.Param("id"))
 	if err != nil {
-		handleAccountError(c, err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid account id"})
 		return
 	}
 
-	if err := database.GetDB().Delete(account).Error; err != nil {
+	if err := services.DeleteAccount(c.Request.Context(), database.GetDB(), id); err != nil {
+		if err == sql.ErrNoRows {
+			c.JSON(http.StatusNotFound, gin.H{"error": "account not found"})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -112,40 +106,37 @@ func DeleteAccount(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
-func GetAccountTabs(c *gin.Context) {
-	account, err := fetchAccountByID(c.Param("id"))
+func OpenAccountSession(c *gin.Context) {
+	id, err := parseID(c.Param("id"))
 	if err != nil {
-		handleAccountError(c, err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid account id"})
 		return
 	}
 
-	tabs := services.BuildTabLinks(*account)
-	c.JSON(http.StatusOK, tabs)
-}
-
-func fetchAccountByID(idParam string) (*models.Account, error) {
-	id, err := strconv.Atoi(idParam)
+	account, err := services.GetAccount(c.Request.Context(), database.GetDB(), id)
 	if err != nil {
-		return nil, fmt.Errorf("invalid id: %w", err)
+		if err == sql.ErrNoRows {
+			c.JSON(http.StatusNotFound, gin.H{"error": "account not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
 	}
 
-	var account models.Account
-	dbErr := database.GetDB().First(&account, id).Error
-	if dbErr != nil {
-		return nil, dbErr
+	tabs, err := services.GetTabs(c.Request.Context(), database.GetDB(), id)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
 	}
 
-	return &account, nil
+	if err := services.LaunchChrome(account, tabs); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"status": "launching"})
 }
 
-func handleAccountError(c *gin.Context, err error) {
-	var numErr *strconv.NumError
-	switch {
-	case errors.As(err, &numErr):
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid account id"})
-	case errors.Is(err, gorm.ErrRecordNotFound):
-		c.JSON(http.StatusNotFound, gin.H{"error": "account not found"})
-	default:
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-	}
+func parseID(idParam string) (int64, error) {
+	return strconv.ParseInt(idParam, 10, 64)
 }

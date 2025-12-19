@@ -10,6 +10,7 @@ const Sidebar = ({
   onAddAccount,
   onEditAccount,
   onDeleteAccount,
+  loading,
 }) => {
   return (
     <aside className="flex h-screen w-[260px] flex-col bg-sidebar text-white shadow-lg">
@@ -27,6 +28,7 @@ const Sidebar = ({
           onSelectAccount={onSelectAccount}
           onEditAccount={onEditAccount}
           onDeleteAccount={onDeleteAccount}
+          loading={loading}
         />
       </div>
       <div className="border-t border-slate-900/60 px-4 py-4">
