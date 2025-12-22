@@ -42,14 +42,6 @@ func InitDB() {
 		log.Printf("warning: failed to enable WAL mode: %v", err)
 	}
 
-	if _, err := sqlDB.Exec(accountsSchema); err != nil {
-		log.Fatalf("failed to apply accounts schema: %v", err)
-	}
-
-	if _, err := sqlDB.Exec(tabsSchema); err != nil {
-		log.Fatalf("failed to apply tabs schema: %v", err)
-	}
-
 	const usersSchema = `
 	CREATE TABLE IF NOT EXISTS users (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -63,6 +55,15 @@ func InitDB() {
 		log.Fatalf("failed to create users table: %v", err)
 	}
 
+	if _, err := sqlDB.Exec(accountsSchema); err != nil {
+		log.Fatalf("failed to apply accounts schema: %v", err)
+	}
+	ensureAccountsUserID(sqlDB)
+
+	if _, err := sqlDB.Exec(tabsSchema); err != nil {
+		log.Fatalf("failed to apply tabs schema: %v", err)
+	}
+
 	db = sqlDB
 }
 
@@ -70,13 +71,61 @@ func GetDB() *sql.DB {
 	return db
 }
 
+func ensureAccountsUserID(sqlDB *sql.DB) {
+	rows, err := sqlDB.Query(`PRAGMA table_info(accounts);`)
+	if err != nil {
+		log.Printf("warning: cannot inspect accounts schema: %v", err)
+		return
+	}
+	defer rows.Close()
+
+	hasUserID := false
+	for rows.Next() {
+		var cid int
+		var name, colType string
+		var notNull int
+		var dfltValue sql.NullString
+		var pk int
+		if err := rows.Scan(&cid, &name, &colType, &notNull, &dfltValue, &pk); err != nil {
+			log.Printf("warning: scan accounts schema: %v", err)
+			return
+		}
+		if name == "user_id" {
+			hasUserID = true
+		}
+	}
+
+	if !hasUserID {
+		if _, err := sqlDB.Exec(`ALTER TABLE accounts ADD COLUMN user_id INTEGER;`); err != nil {
+			log.Printf("warning: add user_id to accounts: %v", err)
+		} else {
+			hasUserID = true
+		}
+	}
+
+	if hasUserID {
+		if _, err := sqlDB.Exec(`CREATE INDEX IF NOT EXISTS idx_accounts_user_id ON accounts(user_id);`); err != nil {
+			log.Printf("warning: create accounts user index: %v", err)
+		}
+	}
+
+	var uid int64
+	if err := sqlDB.QueryRow(`SELECT id FROM users ORDER BY id ASC LIMIT 1;`).Scan(&uid); err == nil {
+		if _, err := sqlDB.Exec(`UPDATE accounts SET user_id = ? WHERE user_id IS NULL;`, uid); err != nil {
+			log.Printf("warning: backfill accounts user_id: %v", err)
+		}
+	}
+}
+
 const accountsSchema = `
 CREATE TABLE IF NOT EXISTS accounts (
 	id INTEGER PRIMARY KEY AUTOINCREMENT,
+	user_id INTEGER NOT NULL,
 	label TEXT NOT NULL,
 	netflix_email TEXT NOT NULL,
 	chrome_profile TEXT NOT NULL UNIQUE,
-	created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+	created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 `
 

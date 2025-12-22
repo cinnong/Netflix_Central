@@ -158,7 +158,8 @@ function App() {
         setAuthToken(res.token)
       }
     } catch (error) {
-      Swal.fire({ title: 'Gagal', text: 'Auth gagal, coba lagi.', icon: 'error' })
+		const message = error?.message || 'Auth gagal, coba lagi.'
+		Swal.fire({ title: 'Gagal', text: message, icon: 'error' })
     }
   }
 

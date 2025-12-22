@@ -62,11 +62,17 @@ func Login(c *gin.Context) {
 	payload.Email = strings.TrimSpace(strings.ToLower(payload.Email))
 	user, err := services.ValidateUser(payload.Email, payload.Password)
 	if err != nil {
-		status := http.StatusUnauthorized
-		if err != services.ErrInvalidCredentials {
-			status = http.StatusInternalServerError
+		switch err {
+		case services.ErrUserNotFound:
+			c.JSON(http.StatusNotFound, gin.H{"error": "akun tidak ditemukan"})
+			return
+		case services.ErrInvalidCredentials:
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "password salah"})
+			return
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to validate user"})
+			return
 		}
-		c.JSON(status, gin.H{"error": "invalid email or password"})
 		return
 	}
 	token, err := generateToken(user.ID, user.Email)

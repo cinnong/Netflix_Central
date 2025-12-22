@@ -17,8 +17,13 @@ type accountPayload struct {
 }
 
 func GetAccounts(c *gin.Context) {
+	userID, ok := currentUserID(c)
+	if !ok {
+		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
 	ctx := c.Request.Context()
-	accounts, err := services.ListAccounts(ctx, database.GetDB())
+	accounts, err := services.ListAccounts(ctx, database.GetDB(), userID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -27,13 +32,19 @@ func GetAccounts(c *gin.Context) {
 }
 
 func CreateAccount(c *gin.Context) {
+	userID, ok := currentUserID(c)
+	if !ok {
+		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
 	var payload accountPayload
 	if err := c.ShouldBindJSON(&payload); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	account, err := services.CreateAccount(c.Request.Context(), database.GetDB(), payload.Label, payload.NetflixEmail)
+	account, err := services.CreateAccount(c.Request.Context(), database.GetDB(), userID, payload.Label, payload.NetflixEmail)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -42,13 +53,19 @@ func CreateAccount(c *gin.Context) {
 }
 
 func GetAccountByID(c *gin.Context) {
+	userID, ok := currentUserID(c)
+	if !ok {
+		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
 	id, err := parseID(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid account id"})
 		return
 	}
 
-	account, err := services.GetAccount(c.Request.Context(), database.GetDB(), id)
+	account, err := services.GetAccount(c.Request.Context(), database.GetDB(), id, userID)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			c.JSON(http.StatusNotFound, gin.H{"error": "account not found"})
@@ -62,6 +79,12 @@ func GetAccountByID(c *gin.Context) {
 }
 
 func UpdateAccount(c *gin.Context) {
+	userID, ok := currentUserID(c)
+	if !ok {
+		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
 	id, err := parseID(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid account id"})
@@ -74,7 +97,7 @@ func UpdateAccount(c *gin.Context) {
 		return
 	}
 
-	account, err := services.UpdateAccount(c.Request.Context(), database.GetDB(), id, payload.Label, payload.NetflixEmail)
+	account, err := services.UpdateAccount(c.Request.Context(), database.GetDB(), id, userID, payload.Label, payload.NetflixEmail)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			c.JSON(http.StatusNotFound, gin.H{"error": "account not found"})
@@ -88,13 +111,19 @@ func UpdateAccount(c *gin.Context) {
 }
 
 func DeleteAccount(c *gin.Context) {
+	userID, ok := currentUserID(c)
+	if !ok {
+		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
 	id, err := parseID(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid account id"})
 		return
 	}
 
-	if err := services.DeleteAccount(c.Request.Context(), database.GetDB(), id); err != nil {
+	if err := services.DeleteAccount(c.Request.Context(), database.GetDB(), id, userID); err != nil {
 		if err == sql.ErrNoRows {
 			c.JSON(http.StatusNotFound, gin.H{"error": "account not found"})
 			return
@@ -107,13 +136,19 @@ func DeleteAccount(c *gin.Context) {
 }
 
 func OpenAccountSession(c *gin.Context) {
+	userID, ok := currentUserID(c)
+	if !ok {
+		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
 	id, err := parseID(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid account id"})
 		return
 	}
 
-	account, err := services.GetAccount(c.Request.Context(), database.GetDB(), id)
+	account, err := services.GetAccount(c.Request.Context(), database.GetDB(), id, userID)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			c.JSON(http.StatusNotFound, gin.H{"error": "account not found"})

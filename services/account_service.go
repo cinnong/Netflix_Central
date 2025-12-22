@@ -10,8 +10,9 @@ import (
 	"netflix_central/models"
 )
 
-func ListAccounts(ctx context.Context, db *sql.DB) ([]models.Account, error) {
-	rows, err := db.QueryContext(ctx, `SELECT id, label, netflix_email, chrome_profile, created_at FROM accounts ORDER BY created_at DESC;`)
+// ListAccounts returns accounts owned by the authenticated user.
+func ListAccounts(ctx context.Context, db *sql.DB, userID int64) ([]models.Account, error) {
+	rows, err := db.QueryContext(ctx, `SELECT id, user_id, label, netflix_email, chrome_profile, created_at FROM accounts WHERE user_id = ? ORDER BY created_at DESC;`, userID)
 	if err != nil {
 		return nil, fmt.Errorf("query accounts: %w", err)
 	}
@@ -21,7 +22,7 @@ func ListAccounts(ctx context.Context, db *sql.DB) ([]models.Account, error) {
 	for rows.Next() {
 		var acc models.Account
 		var created string
-		if err := rows.Scan(&acc.ID, &acc.Label, &acc.NetflixEmail, &acc.ChromeProfile, &created); err != nil {
+		if err := rows.Scan(&acc.ID, &acc.UserID, &acc.Label, &acc.NetflixEmail, &acc.ChromeProfile, &created); err != nil {
 			return nil, fmt.Errorf("scan account: %w", err)
 		}
 		acc.CreatedAt = parseSQLiteTime(created)
@@ -31,21 +32,24 @@ func ListAccounts(ctx context.Context, db *sql.DB) ([]models.Account, error) {
 	return accounts, rows.Err()
 }
 
-func GetAccount(ctx context.Context, db *sql.DB, id int64) (models.Account, error) {
+// GetAccount ensures the account belongs to the given user.
+func GetAccount(ctx context.Context, db *sql.DB, id, userID int64) (models.Account, error) {
 	var acc models.Account
 	var created string
 	if err := db.QueryRowContext(
 		ctx,
-		`SELECT id, label, netflix_email, chrome_profile, created_at FROM accounts WHERE id = ?;`,
+		`SELECT id, user_id, label, netflix_email, chrome_profile, created_at FROM accounts WHERE id = ? AND user_id = ?;`,
 		id,
-	).Scan(&acc.ID, &acc.Label, &acc.NetflixEmail, &acc.ChromeProfile, &created); err != nil {
+		userID,
+	).Scan(&acc.ID, &acc.UserID, &acc.Label, &acc.NetflixEmail, &acc.ChromeProfile, &created); err != nil {
 		return acc, err
 	}
 	acc.CreatedAt = parseSQLiteTime(created)
 	return acc, nil
 }
 
-func CreateAccount(ctx context.Context, db *sql.DB, label, email string) (models.Account, error) {
+// CreateAccount inserts a new account tied to the user.
+func CreateAccount(ctx context.Context, db *sql.DB, userID int64, label, email string) (models.Account, error) {
 	label = strings.TrimSpace(label)
 	email = strings.TrimSpace(email)
 
@@ -63,7 +67,8 @@ func CreateAccount(ctx context.Context, db *sql.DB, label, email string) (models
 
 	result, err := tx.ExecContext(
 		ctx,
-		`INSERT INTO accounts (label, netflix_email, chrome_profile, created_at) VALUES (?, ?, ?, ?);`,
+		`INSERT INTO accounts (user_id, label, netflix_email, chrome_profile, created_at) VALUES (?, ?, ?, ?, ?);`,
+		userID,
 		label,
 		email,
 		profileName,
@@ -91,6 +96,7 @@ func CreateAccount(ctx context.Context, db *sql.DB, label, email string) (models
 
 	return models.Account{
 		ID:            accountID,
+		UserID:        userID,
 		Label:         label,
 		NetflixEmail:  email,
 		ChromeProfile: profileName,
@@ -98,16 +104,18 @@ func CreateAccount(ctx context.Context, db *sql.DB, label, email string) (models
 	}, nil
 }
 
-func UpdateAccount(ctx context.Context, db *sql.DB, id int64, label, email string) (models.Account, error) {
+// UpdateAccount edits an account owned by the user.
+func UpdateAccount(ctx context.Context, db *sql.DB, id, userID int64, label, email string) (models.Account, error) {
 	label = strings.TrimSpace(label)
 	email = strings.TrimSpace(email)
 
 	result, err := db.ExecContext(
 		ctx,
-		`UPDATE accounts SET label = ?, netflix_email = ? WHERE id = ?;`,
+		`UPDATE accounts SET label = ?, netflix_email = ? WHERE id = ? AND user_id = ?;`,
 		label,
 		email,
 		id,
+		userID,
 	)
 	if err != nil {
 		return models.Account{}, fmt.Errorf("update account: %w", err)
@@ -117,16 +125,17 @@ func UpdateAccount(ctx context.Context, db *sql.DB, id int64, label, email strin
 		return models.Account{}, sql.ErrNoRows
 	}
 
-	return GetAccount(ctx, db, id)
+	return GetAccount(ctx, db, id, userID)
 }
 
-func DeleteAccount(ctx context.Context, db *sql.DB, id int64) error {
+// DeleteAccount removes an account owned by the user.
+func DeleteAccount(ctx context.Context, db *sql.DB, id, userID int64) error {
 	_, err := db.ExecContext(ctx, `DELETE FROM tabs WHERE account_id = ?;`, id)
 	if err != nil {
 		return fmt.Errorf("delete tabs for account: %w", err)
 	}
 
-	result, err := db.ExecContext(ctx, `DELETE FROM accounts WHERE id = ?;`, id)
+	result, err := db.ExecContext(ctx, `DELETE FROM accounts WHERE id = ? AND user_id = ?;`, id, userID)
 	if err != nil {
 		return fmt.Errorf("delete account: %w", err)
 	}

@@ -21,9 +21,24 @@ type reorderPayload struct {
 }
 
 func GetTabsByAccount(c *gin.Context) {
+	userID, ok := currentUserID(c)
+	if !ok {
+		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
 	accountID, err := parseID(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid account id"})
+		return
+	}
+
+	if _, err := services.GetAccount(c.Request.Context(), database.GetDB(), accountID, userID); err != nil {
+		if err == sql.ErrNoRows {
+			c.JSON(http.StatusNotFound, gin.H{"error": "account not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
@@ -36,9 +51,24 @@ func GetTabsByAccount(c *gin.Context) {
 }
 
 func CreateTabForAccount(c *gin.Context) {
+	userID, ok := currentUserID(c)
+	if !ok {
+		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
 	accountID, err := parseID(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid account id"})
+		return
+	}
+
+	if _, err := services.GetAccount(c.Request.Context(), database.GetDB(), accountID, userID); err != nil {
+		if err == sql.ErrNoRows {
+			c.JSON(http.StatusNotFound, gin.H{"error": "account not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
@@ -58,6 +88,12 @@ func CreateTabForAccount(c *gin.Context) {
 }
 
 func UpdateTabForAccount(c *gin.Context) {
+	userID, ok := currentUserID(c)
+	if !ok {
+		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
 	accountID, err := parseID(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid account id"})
@@ -76,6 +112,15 @@ func UpdateTabForAccount(c *gin.Context) {
 		return
 	}
 
+	if _, err := services.GetAccount(c.Request.Context(), database.GetDB(), accountID, userID); err != nil {
+		if err == sql.ErrNoRows {
+			c.JSON(http.StatusNotFound, gin.H{"error": "account not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
 	tab, err := services.UpdateTab(c.Request.Context(), database.GetDB(), tabID, accountID, payload.Title, payload.URL)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -90,6 +135,12 @@ func UpdateTabForAccount(c *gin.Context) {
 }
 
 func DeleteTabForAccount(c *gin.Context) {
+	userID, ok := currentUserID(c)
+	if !ok {
+		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
 	accountID, err := parseID(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid account id"})
@@ -99,6 +150,15 @@ func DeleteTabForAccount(c *gin.Context) {
 	tabID, err := strconv.ParseInt(c.Param("tabId"), 10, 64)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid tab id"})
+		return
+	}
+
+	if _, err := services.GetAccount(c.Request.Context(), database.GetDB(), accountID, userID); err != nil {
+		if err == sql.ErrNoRows {
+			c.JSON(http.StatusNotFound, gin.H{"error": "account not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
@@ -115,6 +175,12 @@ func DeleteTabForAccount(c *gin.Context) {
 }
 
 func ReorderTabsForAccount(c *gin.Context) {
+	userID, ok := currentUserID(c)
+	if !ok {
+		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
 	accountID, err := parseID(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid account id"})
@@ -124,6 +190,15 @@ func ReorderTabsForAccount(c *gin.Context) {
 	var payload reorderPayload
 	if err := c.ShouldBindJSON(&payload); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if _, err := services.GetAccount(c.Request.Context(), database.GetDB(), accountID, userID); err != nil {
+		if err == sql.ErrNoRows {
+			c.JSON(http.StatusNotFound, gin.H{"error": "account not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 

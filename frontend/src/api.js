@@ -23,8 +23,17 @@ async function request(path, options = {}) {
   });
 
   if (!response.ok) {
-    const message = await response.text();
-    throw new Error(message || 'Request failed');
+    let message = 'Request failed';
+    try {
+      const data = await response.json();
+      if (data && typeof data.error === 'string') {
+        message = data.error;
+      }
+    } catch (_) {
+      const text = await response.text();
+      if (text) message = text;
+    }
+    throw new Error(message);
   }
 
   if (response.status === 204) {

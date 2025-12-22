@@ -10,7 +10,10 @@ import (
 	"netflix_central/models"
 )
 
-var ErrInvalidCredentials = errors.New("invalid credentials")
+var (
+	ErrInvalidCredentials = errors.New("invalid credentials")
+	ErrUserNotFound       = errors.New("user not found")
+)
 
 func CreateUser(email, password string) (*models.User, error) {
 	db := database.GetDB()
@@ -48,7 +51,7 @@ func ValidateUser(email, password string) (*models.User, error) {
 		return nil, err
 	}
 	if u == nil {
-		return nil, ErrInvalidCredentials
+		return nil, ErrUserNotFound
 	}
 	if err := bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(password)); err != nil {
 		return nil, ErrInvalidCredentials
