@@ -23,15 +23,19 @@ async function request(path, options = {}) {
   });
 
   if (!response.ok) {
+    const text = await response.text();
     let message = 'Request failed';
-    try {
-      const data = await response.json();
-      if (data && typeof data.error === 'string') {
-        message = data.error;
+    if (text) {
+      try {
+        const data = JSON.parse(text);
+        if (data && typeof data.error === 'string') {
+          message = data.error;
+        } else {
+          message = text;
+        }
+      } catch (_) {
+        message = text;
       }
-    } catch (_) {
-      const text = await response.text();
-      if (text) message = text;
     }
     throw new Error(message);
   }
