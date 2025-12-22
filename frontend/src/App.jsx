@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import Swal from 'sweetalert2'
 import Modal from './components/Modal'
-import { createAccount, deleteAccount, fetchAccounts, openAccount, updateAccount } from './api'
+import { createAccount, deleteAccount, fetchAccounts, login, openAccount, register, setAuthToken, updateAccount } from './api'
 
 const applyThemeClass = (mode) => {
   const isDark = mode === 'dark'
@@ -17,6 +17,9 @@ function App() {
   const [selectedAccountId, setSelectedAccountId] = useState(null)
   const [searchValue, setSearchValue] = useState('')
   const [loading, setLoading] = useState(false)
+  const [authToken, setTokenState] = useState(() => localStorage.getItem('authToken') || '')
+  const [authMode, setAuthMode] = useState('login')
+  const [authForm, setAuthForm] = useState({ email: '', password: '' })
   const [theme, setTheme] = useState(() => {
     const stored = localStorage.getItem('theme')
     const initial = stored === 'dark' ? 'dark' : 'light'
@@ -28,6 +31,7 @@ function App() {
 
   useEffect(() => {
     const load = async () => {
+      if (!authToken) return
       setLoading(true)
       try {
         const data = await fetchAccounts()
@@ -38,8 +42,9 @@ function App() {
         setLoading(false)
       }
     }
+    setAuthToken(authToken)
     load()
-  }, [])
+  }, [authToken])
 
   useEffect(() => {
     localStorage.setItem('theme', theme)
@@ -140,6 +145,29 @@ function App() {
     setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'))
   }
 
+  const handleAuthSubmit = async (event) => {
+    event.preventDefault()
+    const email = authForm.email.trim().toLowerCase()
+    const password = authForm.password
+    if (!email || !password) return
+    try {
+      const fn = authMode === 'login' ? login : register
+      const res = await fn({ email, password })
+      if (res?.token) {
+        setTokenState(res.token)
+        setAuthToken(res.token)
+      }
+    } catch (error) {
+      Swal.fire({ title: 'Gagal', text: 'Auth gagal, coba lagi.', icon: 'error' })
+    }
+  }
+
+  const handleLogout = () => {
+    setTokenState('')
+    setAuthToken('')
+    setAccounts([])
+  }
+
   const validateAccountForm = (values) => {
     const errors = {}
     const email = values.netflix_email?.trim().toLowerCase()
@@ -158,6 +186,78 @@ function App() {
     }
 
     return errors
+  }
+
+  if (!authToken) {
+    return (
+      <div className={theme === 'dark' ? 'dark' : ''}>
+        <div className="min-h-screen bg-slate-100 px-4 py-10 transition-colors dark:bg-slate-900">
+          <div className="mx-auto flex max-w-md flex-col gap-6 rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700 dark:bg-slate-800">
+            <div className="flex items-center justify-between">
+              <div>
+                <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">Netflix Accounts</h1>
+                <p className="text-sm text-slate-500 dark:text-slate-400">Masuk untuk mengelola akun.</p>
+              </div>
+              <button
+                type="button"
+                onClick={toggleTheme}
+                className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+              >
+                {theme === 'dark' ? '☀️' : '🌙'}
+              </button>
+            </div>
+
+            <div className="flex items-center gap-2 text-sm font-medium text-slate-600 dark:text-slate-300">
+              <button
+                type="button"
+                onClick={() => setAuthMode('login')}
+                className={`rounded-md px-3 py-2 ${authMode === 'login' ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900' : 'bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-200'}`}
+              >
+                Login
+              </button>
+              <button
+                type="button"
+                onClick={() => setAuthMode('register')}
+                className={`rounded-md px-3 py-2 ${authMode === 'register' ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900' : 'bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-200'}`}
+              >
+                Register
+              </button>
+            </div>
+
+            <form className="space-y-4" onSubmit={handleAuthSubmit}>
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-slate-700 dark:text-slate-200">Email</label>
+                <input
+                  value={authForm.email}
+                  onChange={(e) => setAuthForm((p) => ({ ...p, email: e.target.value }))}
+                  type="email"
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 shadow-inner focus:border-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-400/50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:shadow-none"
+                  placeholder="you@example.com"
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-slate-700 dark:text-slate-200">Password</label>
+                <input
+                  value={authForm.password}
+                  onChange={(e) => setAuthForm((p) => ({ ...p, password: e.target.value }))}
+                  type="password"
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 shadow-inner focus:border-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-400/50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:shadow-none"
+                  placeholder="••••••••"
+                  required
+                />
+              </div>
+              <button
+                type="submit"
+                className="w-full rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-700 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-200"
+              >
+                {authMode === 'login' ? 'Login' : 'Register'}
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -186,6 +286,13 @@ function App() {
                     <span>Dark</span>
                   </>
                 )}
+              </button>
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="inline-flex items-center justify-center gap-2 rounded-lg border border-rose-200 bg-white px-4 py-2 text-sm font-medium text-rose-600 transition hover:bg-rose-50 dark:border-rose-400/40 dark:bg-slate-800 dark:text-rose-300 dark:hover:bg-rose-500/10"
+              >
+                Logout
               </button>
             </div>
             <div className="flex w-full max-w-xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-center">

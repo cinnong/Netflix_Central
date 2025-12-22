@@ -50,6 +50,19 @@ func InitDB() {
 		log.Fatalf("failed to apply tabs schema: %v", err)
 	}
 
+	const usersSchema = `
+	CREATE TABLE IF NOT EXISTS users (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		email TEXT NOT NULL UNIQUE,
+		password_hash TEXT NOT NULL,
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+	);
+	`
+
+	if _, err := sqlDB.Exec(usersSchema); err != nil {
+		log.Fatalf("failed to create users table: %v", err)
+	}
+
 	db = sqlDB
 }
 
