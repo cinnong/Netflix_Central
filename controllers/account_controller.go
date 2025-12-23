@@ -14,6 +14,7 @@ import (
 type accountPayload struct {
 	Label        string `json:"label" binding:"required"`
 	NetflixEmail string `json:"netflix_email" binding:"required,email"`
+	Status       string `json:"status" binding:"required,oneof=active inactive"`
 }
 
 func GetAccounts(c *gin.Context) {
@@ -44,7 +45,7 @@ func CreateAccount(c *gin.Context) {
 		return
 	}
 
-	account, err := services.CreateAccount(c.Request.Context(), database.GetDB(), userID, payload.Label, payload.NetflixEmail)
+	account, err := services.CreateAccount(c.Request.Context(), database.GetDB(), userID, payload.Label, payload.NetflixEmail, payload.Status)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -97,7 +98,7 @@ func UpdateAccount(c *gin.Context) {
 		return
 	}
 
-	account, err := services.UpdateAccount(c.Request.Context(), database.GetDB(), id, userID, payload.Label, payload.NetflixEmail)
+	account, err := services.UpdateAccount(c.Request.Context(), database.GetDB(), id, userID, payload.Label, payload.NetflixEmail, payload.Status)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			c.JSON(http.StatusNotFound, gin.H{"error": "account not found"})

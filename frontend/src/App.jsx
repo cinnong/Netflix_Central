@@ -115,7 +115,11 @@ function App() {
   const closeModal = () => setModalState({ type: null, payload: null, version: Date.now() })
 
   const submitAccountModal = async (values) => {
-    const payload = { label: values.label?.trim(), netflix_email: values.netflix_email?.trim() }
+  const payload = {
+    label: values.label?.trim(),
+    netflix_email: values.netflix_email?.trim(),
+    status: values.status || 'active',
+  }
 
     try {
       if (modalState.type === 'add-account') {
@@ -172,6 +176,7 @@ function App() {
   const validateAccountForm = (values) => {
     const errors = {}
     const email = values.netflix_email?.trim().toLowerCase()
+    const status = values.status?.trim().toLowerCase()
     const isDuplicate = email
       ? accounts.some(
           (account) =>
@@ -185,6 +190,11 @@ function App() {
     } else if (isDuplicate) {
       errors.netflix_email = 'Email sudah ada, tidak boleh duplikat.'
     }
+
+	const allowedStatus = ['active', 'inactive']
+	if (!status || !allowedStatus.includes(status)) {
+		errors.status = 'Status wajib diisi (aktif / nonaktif).'
+	}
 
     return errors
   }
@@ -297,12 +307,24 @@ function App() {
               </button>
             </div>
             <div className="flex w-full max-w-xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-center">
-              <input
-                value={searchValue}
-                onChange={(e) => setSearchValue(e.target.value)}
-                placeholder="Cari berdasarkan email"
-                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 shadow-inner focus:border-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-300 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:shadow-none"
-              />
+              <div className="relative w-full sm:w-auto sm:flex-1">
+                <input
+                  value={searchValue}
+                  onChange={(e) => setSearchValue(e.target.value)}
+                  placeholder="Cari berdasarkan email"
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 pr-9 text-sm text-slate-900 shadow-inner focus:border-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-300 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:shadow-none"
+                />
+                {searchValue && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchValue('')}
+                    aria-label="Clear search"
+                    className="absolute inset-y-0 right-2 my-auto inline-flex h-6 w-6 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-700"
+                  >
+                    ×
+                  </button>
+                )}
+              </div>
               <button
                 type="button"
                 onClick={handleAddAccount}
@@ -340,7 +362,18 @@ function App() {
                         className="group cursor-pointer rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-slate-400/60 dark:border-slate-700 dark:bg-slate-800 dark:focus:ring-slate-600/60"
                       >
                         <div className="w-full text-left">
-                          <div className="truncate text-base font-semibold text-slate-900 dark:text-slate-100">{account.netflix_email}</div>
+                          <div className="flex items-center gap-2">
+                            <div className="truncate text-base font-semibold text-slate-900 dark:text-slate-100">{account.netflix_email}</div>
+                            <span
+                              className={`inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-xs font-semibold ${
+                                account.status === 'inactive'
+                                  ? 'bg-amber-100 text-amber-700 dark:bg-amber-400/20 dark:text-amber-200'
+                                  : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-400/20 dark:text-emerald-100'
+                              }`}
+                            >
+                              {account.status === 'inactive' ? 'Nonaktif' : 'Aktif'}
+                            </span>
+                          </div>
                           <div className="truncate text-sm text-slate-500 dark:text-slate-400">{account.label}</div>
                         </div>
                         <div className="mt-3 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
@@ -387,10 +420,15 @@ function App() {
         fields={[
           { name: 'label', label: 'Label', placeholder: 'Netflix Family 1' },
           { name: 'netflix_email', label: 'Netflix Email', placeholder: 'name@example.com' },
+			{ name: 'status', label: 'Status', type: 'select', options: [
+				{ value: 'active', label: 'Aktif' },
+				{ value: 'inactive', label: 'Nonaktif' },
+			], placeholder: 'Pilih status' },
         ]}
         initialValues={{
           label: modalState.payload?.label ?? '',
           netflix_email: modalState.payload?.netflix_email ?? '',
+			status: modalState.payload?.status ?? 'active',
         }}
         onClose={closeModal}
         onSubmit={submitAccountModal}

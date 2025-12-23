@@ -8,5 +8,6 @@ type Account struct {
 	Label         string    `json:"label"`
 	NetflixEmail  string    `json:"netflix_email"`
 	ChromeProfile string    `json:"chrome_profile"`
+	Status        string    `json:"status"`
 	CreatedAt     time.Time `json:"created_at"`
 }

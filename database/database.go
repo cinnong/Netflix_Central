@@ -59,6 +59,7 @@ func InitDB() {
 		log.Fatalf("failed to apply accounts schema: %v", err)
 	}
 	ensureAccountsUserID(sqlDB)
+	ensureAccountsStatus(sqlDB)
 
 	if _, err := sqlDB.Exec(tabsSchema); err != nil {
 		log.Fatalf("failed to apply tabs schema: %v", err)
@@ -117,12 +118,49 @@ func ensureAccountsUserID(sqlDB *sql.DB) {
 	}
 }
 
+func ensureAccountsStatus(sqlDB *sql.DB) {
+	rows, err := sqlDB.Query(`PRAGMA table_info(accounts);`)
+	if err != nil {
+		log.Printf("warning: cannot inspect accounts schema: %v", err)
+		return
+	}
+	defer rows.Close()
+
+	hasStatus := false
+	for rows.Next() {
+		var cid int
+		var name, colType string
+		var notNull int
+		var dfltValue sql.NullString
+		var pk int
+		if err := rows.Scan(&cid, &name, &colType, &notNull, &dfltValue, &pk); err != nil {
+			log.Printf("warning: scan accounts schema: %v", err)
+			return
+		}
+		if name == "status" {
+			hasStatus = true
+		}
+	}
+
+	if !hasStatus {
+		if _, err := sqlDB.Exec(`ALTER TABLE accounts ADD COLUMN status TEXT NOT NULL DEFAULT 'active';`); err != nil {
+			log.Printf("warning: add status to accounts: %v", err)
+			return
+		}
+	}
+
+	if _, err := sqlDB.Exec(`UPDATE accounts SET status = 'active' WHERE status IS NULL OR status = '';`); err != nil {
+		log.Printf("warning: backfill accounts status: %v", err)
+	}
+}
+
 const accountsSchema = `
 CREATE TABLE IF NOT EXISTS accounts (
 	id INTEGER PRIMARY KEY AUTOINCREMENT,
 	user_id INTEGER NOT NULL,
 	label TEXT NOT NULL,
 	netflix_email TEXT NOT NULL,
+	status TEXT NOT NULL DEFAULT 'active',
 	chrome_profile TEXT NOT NULL UNIQUE,
 	created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 	FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE

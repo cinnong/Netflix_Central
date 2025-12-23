@@ -67,16 +67,46 @@ const Modal = ({
               <label htmlFor={field.name} className="text-sm font-medium text-slate-700 dark:text-slate-200">
                 {field.label}
               </label>
-              <input
-                id={field.name}
-                name={field.name}
-                type={field.type || 'text'}
-                required={field.required !== false}
-                placeholder={field.placeholder}
-                value={formValues[field.name] ?? ''}
-                onChange={(event) => handleChange(field.name, event.target.value)}
-                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-inner focus:border-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-400/50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:shadow-none dark:focus:border-slate-500 dark:focus:ring-slate-500/50"
-              />
+              {field.type === 'select' && Array.isArray(field.options) ? (
+                <select
+                  id={field.name}
+                  name={field.name}
+                  required={field.required !== false}
+                  value={formValues[field.name] ?? ''}
+                  onChange={(event) => handleChange(field.name, event.target.value)}
+                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-inner focus:border-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-400/50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:shadow-none dark:focus:border-slate-500 dark:focus:ring-slate-500/50"
+                >
+                  {field.placeholder ? <option value="">{field.placeholder}</option> : null}
+                  {field.options.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <div className="relative">
+                  <input
+                    id={field.name}
+                    name={field.name}
+                    type={field.type || 'text'}
+                    required={field.required !== false}
+                    placeholder={field.placeholder}
+                    value={formValues[field.name] ?? ''}
+                    onChange={(event) => handleChange(field.name, event.target.value)}
+                    className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 pr-9 text-sm text-slate-900 shadow-inner focus:border-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-400/50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:shadow-none dark:focus:border-slate-500 dark:focus:ring-slate-500/50"
+                  />
+                  {formValues[field.name] && (
+                    <button
+                      type="button"
+                      onClick={() => handleChange(field.name, '')}
+                      aria-label={`Clear ${field.label}`}
+                      className="absolute inset-y-0 right-2 my-auto inline-flex h-6 w-6 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-700"
+                    >
+                      ×
+                    </button>
+                  )}
+                </div>
+              )}
               {fieldErrors[field.name] && <p className="text-xs font-medium text-rose-600">{fieldErrors[field.name]}</p>}
             </div>
           ))}

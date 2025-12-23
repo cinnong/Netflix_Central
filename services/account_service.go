@@ -12,7 +12,7 @@ import (
 
 // ListAccounts returns accounts owned by the authenticated user.
 func ListAccounts(ctx context.Context, db *sql.DB, userID int64) ([]models.Account, error) {
-	rows, err := db.QueryContext(ctx, `SELECT id, user_id, label, netflix_email, chrome_profile, created_at FROM accounts WHERE user_id = ? ORDER BY created_at DESC;`, userID)
+	rows, err := db.QueryContext(ctx, `SELECT id, user_id, label, netflix_email, status, chrome_profile, created_at FROM accounts WHERE user_id = ? ORDER BY created_at DESC;`, userID)
 	if err != nil {
 		return nil, fmt.Errorf("query accounts: %w", err)
 	}
@@ -22,7 +22,7 @@ func ListAccounts(ctx context.Context, db *sql.DB, userID int64) ([]models.Accou
 	for rows.Next() {
 		var acc models.Account
 		var created string
-		if err := rows.Scan(&acc.ID, &acc.UserID, &acc.Label, &acc.NetflixEmail, &acc.ChromeProfile, &created); err != nil {
+		if err := rows.Scan(&acc.ID, &acc.UserID, &acc.Label, &acc.NetflixEmail, &acc.Status, &acc.ChromeProfile, &created); err != nil {
 			return nil, fmt.Errorf("scan account: %w", err)
 		}
 		acc.CreatedAt = parseSQLiteTime(created)
@@ -38,10 +38,10 @@ func GetAccount(ctx context.Context, db *sql.DB, id, userID int64) (models.Accou
 	var created string
 	if err := db.QueryRowContext(
 		ctx,
-		`SELECT id, user_id, label, netflix_email, chrome_profile, created_at FROM accounts WHERE id = ? AND user_id = ?;`,
+		`SELECT id, user_id, label, netflix_email, status, chrome_profile, created_at FROM accounts WHERE id = ? AND user_id = ?;`,
 		id,
 		userID,
-	).Scan(&acc.ID, &acc.UserID, &acc.Label, &acc.NetflixEmail, &acc.ChromeProfile, &created); err != nil {
+	).Scan(&acc.ID, &acc.UserID, &acc.Label, &acc.NetflixEmail, &acc.Status, &acc.ChromeProfile, &created); err != nil {
 		return acc, err
 	}
 	acc.CreatedAt = parseSQLiteTime(created)
@@ -49,12 +49,16 @@ func GetAccount(ctx context.Context, db *sql.DB, id, userID int64) (models.Accou
 }
 
 // CreateAccount inserts a new account tied to the user.
-func CreateAccount(ctx context.Context, db *sql.DB, userID int64, label, email string) (models.Account, error) {
+func CreateAccount(ctx context.Context, db *sql.DB, userID int64, label, email, status string) (models.Account, error) {
 	label = strings.TrimSpace(label)
 	email = strings.TrimSpace(email)
+	status = normalizeStatus(status)
 
 	if label == "" || email == "" {
 		return models.Account{}, fmt.Errorf("label and email are required")
+	}
+	if status == "" {
+		return models.Account{}, fmt.Errorf("status is required")
 	}
 
 	tx, err := db.BeginTx(ctx, nil)
@@ -67,10 +71,11 @@ func CreateAccount(ctx context.Context, db *sql.DB, userID int64, label, email s
 
 	result, err := tx.ExecContext(
 		ctx,
-		`INSERT INTO accounts (user_id, label, netflix_email, chrome_profile, created_at) VALUES (?, ?, ?, ?, ?);`,
+		`INSERT INTO accounts (user_id, label, netflix_email, status, chrome_profile, created_at) VALUES (?, ?, ?, ?, ?, ?);`,
 		userID,
 		label,
 		email,
+		status,
 		profileName,
 		createdAt,
 	)
@@ -99,21 +104,28 @@ func CreateAccount(ctx context.Context, db *sql.DB, userID int64, label, email s
 		UserID:        userID,
 		Label:         label,
 		NetflixEmail:  email,
+		Status:        status,
 		ChromeProfile: profileName,
 		CreatedAt:     parseSQLiteTime(createdAt),
 	}, nil
 }
 
 // UpdateAccount edits an account owned by the user.
-func UpdateAccount(ctx context.Context, db *sql.DB, id, userID int64, label, email string) (models.Account, error) {
+func UpdateAccount(ctx context.Context, db *sql.DB, id, userID int64, label, email, status string) (models.Account, error) {
 	label = strings.TrimSpace(label)
 	email = strings.TrimSpace(email)
+	status = normalizeStatus(status)
+
+	if status == "" {
+		return models.Account{}, fmt.Errorf("status is required")
+	}
 
 	result, err := db.ExecContext(
 		ctx,
-		`UPDATE accounts SET label = ?, netflix_email = ? WHERE id = ? AND user_id = ?;`,
+		`UPDATE accounts SET label = ?, netflix_email = ?, status = ? WHERE id = ? AND user_id = ?;`,
 		label,
 		email,
+		status,
 		id,
 		userID,
 	)
@@ -175,4 +187,12 @@ func parseSQLiteTime(value string) time.Time {
 	}
 
 	return time.Time{}
+}
+
+func normalizeStatus(value string) string {
+	s := strings.ToLower(strings.TrimSpace(value))
+	if s == "active" || s == "inactive" {
+		return s
+	}
+	return ""
 }
