@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import Swal from 'sweetalert2'
 import Modal from './components/Modal'
 import { createAccount, deleteAccount, fetchAccounts, login, openAccount, register, setAuthToken, updateAccount } from './api'
@@ -16,7 +16,12 @@ function App() {
   const [accounts, setAccounts] = useState([])
   const [selectedAccountId, setSelectedAccountId] = useState(null)
   const [searchValue, setSearchValue] = useState('')
+  const [filterLabel, setFilterLabel] = useState('all')
+  const [filterStatus, setFilterStatus] = useState('all')
+  const [showFilters, setShowFilters] = useState(false)
+  const filterRef = useRef(null)
   const [loading, setLoading] = useState(false)
+  const [showSummary, setShowSummary] = useState(false)
   const [authToken, setTokenState] = useState(() => localStorage.getItem('authToken') || '')
   const [authMode, setAuthMode] = useState('login')
   const [authForm, setAuthForm] = useState({ email: '', password: '' })
@@ -51,15 +56,30 @@ function App() {
     applyThemeClass(theme)
   }, [theme])
 
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (showFilters && filterRef.current && !filterRef.current.contains(event.target)) {
+        setShowFilters(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [showFilters])
+
   const filteredAccounts = useMemo(() => {
     if (!Array.isArray(accounts)) return []
     const trimmed = searchValue.trim().toLowerCase()
-    const list = trimmed
-      ? accounts.filter((account) => account.netflix_email.toLowerCase().includes(trimmed))
-      : accounts
+
+    const list = accounts.filter((account) => {
+      const matchesSearch = trimmed ? account.netflix_email.toLowerCase().includes(trimmed) : true
+      const matchesLabel = filterLabel === 'all' ? true : account.label?.trim().toLowerCase() === filterLabel
+      const matchesStatus = filterStatus === 'all' ? true : account.status === filterStatus
+      return matchesSearch && matchesLabel && matchesStatus
+    })
 
     return [...list].sort((a, b) => a.netflix_email.localeCompare(b.netflix_email))
-  }, [accounts, searchValue])
+  }, [accounts, searchValue, filterLabel, filterStatus])
 
   const groupedAccounts = useMemo(() => {
     const groups = {}
@@ -74,6 +94,27 @@ function App() {
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([letter, list]) => ({ letter, list }))
   }, [filteredAccounts])
+
+  const summaryStats = useMemo(() => {
+    if (!Array.isArray(accounts)) return { total: 0, active: 0, inactive: 0, bulanan: 0, mingguan: 0 }
+
+    let total = accounts.length
+    let active = 0
+    let inactive = 0
+    let bulanan = 0
+    let mingguan = 0
+
+    accounts.forEach((account) => {
+      if (account.status === 'active') active += 1
+      else if (account.status === 'inactive') inactive += 1
+
+      const label = (account.label || '').trim().toLowerCase()
+      if (label === 'bulanan') bulanan += 1
+      if (label === 'mingguan') mingguan += 1
+    })
+
+    return { total, active, inactive, bulanan, mingguan }
+  }, [accounts])
 
   const handleSelectAccount = async (accountId) => {
     setSelectedAccountId(accountId)
@@ -168,13 +209,25 @@ function App() {
   }
 
   const handleLogout = () => {
-    setTokenState('')
-    setAuthToken('')
-    setAccounts([])
+    Swal.fire({
+      title: 'Logout?',
+      text: 'Apakah kamu yakin ingin logout?',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: 'Ya, logout',
+      cancelButtonText: 'Batal',
+      confirmButtonColor: '#e11d48',
+    }).then((result) => {
+      if (!result.isConfirmed) return
+      setTokenState('')
+      setAuthToken('')
+      setAccounts([])
+    })
   }
 
   const validateAccountForm = (values) => {
     const errors = {}
+    const label = values.label?.trim().toLowerCase()
     const email = values.netflix_email?.trim().toLowerCase()
     const status = values.status?.trim().toLowerCase()
     const isDuplicate = email
@@ -184,6 +237,11 @@ function App() {
             (modalState.type === 'add-account' || account.id !== modalState.payload?.id),
         )
       : false
+
+    const allowedLabels = ['bulanan', 'mingguan']
+    if (!label || !allowedLabels.includes(label)) {
+      errors.label = 'Label wajib (pilih Bulanan atau Mingguan).'
+    }
 
     if (!email) {
       errors.netflix_email = 'Email wajib diisi.'
@@ -276,43 +334,131 @@ function App() {
       <div className="min-h-screen bg-slate-100 px-3 py-10 transition-colors dark:bg-slate-900">
         <div className="mx-auto flex max-w-7xl flex-col items-center gap-6">
           <div className="flex w-full flex-col items-center gap-3 text-center">
-            <div className="flex w-full max-w-6xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex-1 text-center sm:text-center">
+            <div className="flex w/full max-w-6xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex-1 text-center">
                 <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-100">Netflix Accounts</h1>
-                <p className="text-sm text-slate-500 dark:text-slate-400">Klik akun untuk membuka Chrome dengan sesi tersimpan.</p>
+                {/* <p className="text-sm text-slate-500 dark:text-slate-400">Klik akun untuk membuka Chrome dengan sesi tersimpan.</p> */}
               </div>
-              <button
-                type="button"
-                onClick={toggleTheme}
-                className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
-              >
-                {theme === 'dark' ? (
-                  <>
-                    <span aria-hidden="true">☀️</span>
-                    <span>Light</span>
-                  </>
-                ) : (
-                  <>
-                    <span aria-hidden="true">🌙</span>
-                    <span>Dark</span>
-                  </>
-                )}
-              </button>
-              <button
-                type="button"
-                onClick={handleLogout}
-                className="inline-flex items-center justify-center gap-2 rounded-lg border border-rose-200 bg-white px-4 py-2 text-sm font-medium text-rose-600 transition hover:bg-rose-50 dark:border-rose-400/40 dark:bg-slate-800 dark:text-rose-300 dark:hover:bg-rose-500/10"
-              >
-                Logout
-              </button>
+              <div className="fixed right-4 top-6 z-30 flex flex-col items-end gap-2 sm:right-6 sm:top-6">
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowSummary((prev) => !prev)}
+                    aria-label="Lihat rangkuman"
+                    className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 bg-white text-base transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
+                  >
+                    🧾
+                  </button>
+                  <button
+                    type="button"
+                    onClick={toggleTheme}
+                    aria-label="Toggle theme"
+                    className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 bg-white text-base text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+                  >
+                    {theme === 'dark' ? '☀️' : '🌙'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleLogout}
+                    aria-label="Logout"
+                    className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-rose-200 bg-white text-base text-rose-600 transition hover:bg-rose-50 dark:border-rose-400/40 dark:bg-slate-800 dark:text-rose-300 dark:hover:bg-rose-500/10"
+                  >
+                    <svg
+                      aria-hidden="true"
+                      className="h-5 w-5"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.8"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <path d="M10 7V5a2 2 0 0 1 2-2h7" />
+                      <path d="M10 17v2a2 2 0 0 0 2 2h7" />
+                      <path d="M10 12h10" />
+                      <path d="m15 8 5 4-5 4" />
+                      <path d="M3 5v14" />
+                      <path d="M10 5H5" />
+                      <path d="M10 19H5" />
+                    </svg>
+                  </button>
+                </div>
+                <div ref={filterRef} className="relative mt-3 self-start">
+                  <button
+                    type="button"
+                    onClick={() => setShowFilters((prev) => !prev)}
+                    aria-label="Filter"
+                    className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 bg-white text-base text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+                  >
+                    <svg
+                      aria-hidden="true"
+                      className="h-5 w-5"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.8"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <path d="M4 5h16" />
+                      <path d="M8 9h8" />
+                      <path d="M10 13h4" />
+                      <path d="M11 13v6l2 1v-7" />
+                    </svg>
+                  </button>
+                  {showFilters && (
+                    <div className="absolute right-0 top-12 z-30 w-56 rounded-lg border border-slate-200 bg-white p-3 shadow-xl dark:border-slate-700 dark:bg-slate-800">
+                      <div className="mb-2 flex items-center justify-end text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setFilterLabel('all')
+                            setFilterStatus('all')
+                            setShowFilters(false)
+                          }}
+                          className="text-[11px] font-medium text-slate-500 transition hover:text-slate-700 dark:hover:text-slate-200"
+                        >
+                          Reset
+                        </button>
+                      </div>
+                      <div className="space-y-2 text-sm">
+                        <label className="space-y-1 block">
+                          <span className="text-xs text-slate-500 dark:text-slate-300">Label</span>
+                          <select
+                            value={filterLabel}
+                            onChange={(e) => setFilterLabel(e.target.value)}
+                            className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-300 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                          >
+                            <option value="all">Semua label</option>
+                            <option value="bulanan">Bulanan</option>
+                            <option value="mingguan">Mingguan</option>
+                          </select>
+                        </label>
+                        <label className="space-y-1 block">
+                          <span className="text-xs text-slate-500 dark:text-slate-300">Status</span>
+                          <select
+                            value={filterStatus}
+                            onChange={(e) => setFilterStatus(e.target.value)}
+                            className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-300 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                          >
+                            <option value="all">Semua status</option>
+                            <option value="active">Aktif</option>
+                            <option value="inactive">Nonaktif</option>
+                          </select>
+                        </label>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
-            <div className="flex w-full max-w-xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-center">
-              <div className="relative w-full sm:w-auto sm:flex-1">
+            <div className="relative flex w/full max-w-6xl flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+              <div className="relative w-full sm:flex-1">
                 <input
                   value={searchValue}
                   onChange={(e) => setSearchValue(e.target.value)}
                   placeholder="Cari berdasarkan email"
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 pr-9 text-sm text-slate-900 shadow-inner focus:border-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-300 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:shadow-none"
+                    className="w-full sm:min-w-[420px] sm:max-w-2xl rounded-lg border border-slate-200 px-4 py-2.5 pr-10 text-sm text-slate-900 shadow-inner focus:border-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-300 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:shadow-none"
                 />
                 {searchValue && (
                   <button
@@ -325,13 +471,16 @@ function App() {
                   </button>
                 )}
               </div>
-              <button
-                type="button"
-                onClick={handleAddAccount}
-                className="inline-flex items-center justify-center rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-700 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-200"
-              >
-                Add Account
-              </button>
+              <div className="flex flex-col gap-2 sm:w-auto sm:flex-row sm:items-center sm:gap-2">
+                <button
+                  type="button"
+                  onClick={handleAddAccount}
+                  aria-label="Add account"
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-slate-900 text-lg font-semibold text-white transition hover:bg-slate-700 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-200"
+                >
+                  +
+                </button>
+              </div>
             </div>
           </div>
 
@@ -386,9 +535,21 @@ function App() {
                                 handleEditAccount(account)
                               }}
                               aria-label="Edit account"
-                              className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 text-base text-slate-600 transition hover:bg-slate-100 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-700"
+                              className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-slate-200 text-slate-600 transition hover:bg-slate-100 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-700"
                             >
-                              ✏️
+                              <svg
+                                aria-hidden="true"
+                                className="h-3.5 w-3.5"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="1.7"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              >
+                                <path d="m4 20 4.5-1.2L19 8.3a1 1 0 0 0-.1-1.4l-1.8-1.8a1 1 0 0 0-1.4-.1L5.2 15.5 4 20Z" />
+                                <path d="m14.5 6.5 3 3" />
+                              </svg>
                             </button>
                             <button
                               type="button"
@@ -397,9 +558,24 @@ function App() {
                                 handleDeleteAccount(account.id)
                               }}
                               aria-label="Delete account"
-                              className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-rose-200 text-base text-rose-600 transition hover:bg-rose-50 dark:border-rose-400/40 dark:text-rose-300 dark:hover:bg-rose-500/10"
+                              className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-rose-200 text-rose-600 transition hover:bg-rose-50 dark:border-rose-400/40 dark:text-rose-300 dark:hover:bg-rose-500/10"
                             >
-                              🗑️
+                              <svg
+                                aria-hidden="true"
+                                className="h-3.5 w-3.5"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="1.7"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              >
+                                <path d="M4 7h16" />
+                                <path d="M9 3h6" />
+                                <path d="M10 11v6" />
+                                <path d="M14 11v6" />
+                                <path d="M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12" />
+                              </svg>
                             </button>
                           </div>
                         </div>
@@ -412,18 +588,73 @@ function App() {
         </div>
       </div>
 
+      {showSummary && (
+        <div
+          className="fixed inset-0 z-40 flex items-start justify-center bg-black/50 px-4 py-10 backdrop-blur-sm sm:items-center"
+          onClick={() => setShowSummary(false)}
+        >
+          <div
+            className="relative w/full max-w-lg rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl dark:border-slate-700 dark:bg-slate-800"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-4 flex items-start justify-between gap-3">
+              <div>
+                <p className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Rangkuman</p>
+                <p className="text-base font-semibold text-slate-900 dark:text-slate-100">Status akun & label</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowSummary(false)}
+                aria-label="Tutup rangkuman"
+                className="inline-flex h-9 w-9 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-700"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 text-sm sm:gap-4">
+              <div className="rounded-xl bg-slate-50 p-4 dark:bg-slate-700/40">
+                <p className="text-xs text-slate-500 dark:text-slate-300">Total akun</p>
+                <p className="text-2xl font-semibold text-slate-900 dark:text-slate-100">{summaryStats.total}</p>
+              </div>
+              <div className="rounded-xl bg-slate-50 p-4 dark:bg-slate-700/40">
+                <p className="text-xs text-slate-500 dark:text-slate-300">Aktif / Nonaktif</p>
+                <p className="text-2xl font-semibold text-slate-900 dark:text-slate-100">{summaryStats.active} / {summaryStats.inactive}</p>
+              </div>
+              <div className="rounded-xl bg-slate-50 p-4 dark:bg-slate-700/40">
+                <p className="text-xs text-slate-500 dark:text-slate-300">Total akun Bulanan</p>
+                <p className="text-2xl font-semibold text-slate-900 dark:text-slate-100">{summaryStats.bulanan}</p>
+              </div>
+              <div className="rounded-xl bg-slate-50 p-4 dark:bg-slate-700/40">
+                <p className="text-xs text-slate-500 dark:text-slate-300">Total akun Mingguan</p>
+                <p className="text-2xl font-semibold text-slate-900 dark:text-slate-100">{summaryStats.mingguan}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <Modal
         key={`account-modal-${modalState.version}`}
         isOpen={modalState.type === 'add-account' || modalState.type === 'edit-account'}
         title={modalState.type === 'edit-account' ? 'Edit Account' : 'Add Account'}
         description={modalState.type === 'edit-account' ? 'Update the label or Netflix email for this account.' : 'Add a new Netflix account with a friendly label.'}
         fields={[
-          { name: 'label', label: 'Label', placeholder: 'Netflix Family 1' },
+          {
+            name: 'label',
+            label: 'Label',
+            type: 'select',
+            options: [
+              { value: 'bulanan', label: 'Bulanan' },
+              { value: 'mingguan', label: 'Mingguan' },
+            ],
+            placeholder: 'Pilih label',
+          },
           { name: 'netflix_email', label: 'Netflix Email', placeholder: 'name@example.com' },
-			{ name: 'status', label: 'Status', type: 'select', options: [
-				{ value: 'active', label: 'Aktif' },
-				{ value: 'inactive', label: 'Nonaktif' },
-			], placeholder: 'Pilih status' },
+            { name: 'status', label: 'Status', type: 'select', options: [
+              { value: 'active', label: 'Aktif' },
+              { value: 'inactive', label: 'Nonaktif' },
+            ], placeholder: 'Pilih status' },
         ]}
         initialValues={{
           label: modalState.payload?.label ?? '',
