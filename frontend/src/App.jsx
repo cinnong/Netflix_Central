@@ -96,13 +96,13 @@ function App() {
   }, [filteredAccounts])
 
   const summaryStats = useMemo(() => {
-    if (!Array.isArray(accounts)) return { total: 0, active: 0, inactive: 0, bulanan: 0, mingguan: 0 }
+    if (!Array.isArray(accounts)) return { total: 0, active: 0, inactive: 0, bulanan: 0, harian: 0 }
 
     let total = accounts.length
     let active = 0
     let inactive = 0
     let bulanan = 0
-    let mingguan = 0
+    let harian = 0
 
     accounts.forEach((account) => {
       if (account.status === 'active') active += 1
@@ -110,10 +110,10 @@ function App() {
 
       const label = (account.label || '').trim().toLowerCase()
       if (label === 'bulanan') bulanan += 1
-      if (label === 'mingguan') mingguan += 1
+      if (label === 'harian') harian += 1
     })
 
-    return { total, active, inactive, bulanan, mingguan }
+    return { total, active, inactive, bulanan, harian }
   }, [accounts])
 
   const handleSelectAccount = async (accountId) => {
@@ -238,9 +238,9 @@ function App() {
         )
       : false
 
-    const allowedLabels = ['bulanan', 'mingguan']
+    const allowedLabels = ['bulanan', 'harian']
     if (!label || !allowedLabels.includes(label)) {
-      errors.label = 'Label wajib (pilih Bulanan atau Mingguan).'
+      errors.label = 'Label wajib (pilih Bulanan atau Harian).'
     }
 
     if (!email) {
@@ -431,7 +431,7 @@ function App() {
                           >
                             <option value="all">Semua label</option>
                             <option value="bulanan">Bulanan</option>
-                            <option value="mingguan">Mingguan</option>
+                            <option value="harian">Harian</option>
                           </select>
                         </label>
                         <label className="space-y-1 block">
@@ -626,8 +626,8 @@ function App() {
                 <p className="text-2xl font-semibold text-slate-900 dark:text-slate-100">{summaryStats.bulanan}</p>
               </div>
               <div className="rounded-xl bg-slate-50 p-4 dark:bg-slate-700/40">
-                <p className="text-xs text-slate-500 dark:text-slate-300">Total akun Mingguan</p>
-                <p className="text-2xl font-semibold text-slate-900 dark:text-slate-100">{summaryStats.mingguan}</p>
+                <p className="text-xs text-slate-500 dark:text-slate-300">Total akun Harian</p>
+                <p className="text-2xl font-semibold text-slate-900 dark:text-slate-100">{summaryStats.harian}</p>
               </div>
             </div>
           </div>
@@ -646,7 +646,7 @@ function App() {
             type: 'select',
             options: [
               { value: 'bulanan', label: 'Bulanan' },
-              { value: 'mingguan', label: 'Mingguan' },
+              { value: 'harian', label: 'Harian' },
             ],
             placeholder: 'Pilih label',
           },
