@@ -42,7 +42,10 @@ function App() {
         const data = await fetchAccounts()
         setAccounts(Array.isArray(data) ? data : [])
       } catch (error) {
-        console.error(error)
+        // Jika error (token expired/invalid), langsung logout otomatis
+        setTokenState('')
+        setAuthToken('')
+        setAccounts([])
       } finally {
         setLoading(false)
       }
@@ -201,10 +204,20 @@ function App() {
       if (res?.token) {
         setTokenState(res.token)
         setAuthToken(res.token)
+        // Setelah login berhasil, langsung fetch akun
+        setLoading(true)
+        try {
+          const data = await fetchAccounts()
+          setAccounts(Array.isArray(data) ? data : [])
+        } catch (err) {
+          // error fetch akun, bisa diabaikan atau tampilkan pesan
+        } finally {
+          setLoading(false)
+        }
       }
     } catch (error) {
-		const message = error?.message || 'Auth gagal, coba lagi.'
-		Swal.fire({ title: 'Gagal', text: message, icon: 'error' })
+      const message = error?.message || 'Auth gagal, coba lagi.'
+      Swal.fire({ title: 'Gagal', text: message, icon: 'error' })
     }
   }
 
