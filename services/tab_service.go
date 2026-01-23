@@ -21,7 +21,7 @@ func InsertDefaultTabs(ctx context.Context, tx *sql.Tx, accountID int64) error {
 	for _, tab := range defaultTabs {
 		if _, err := tx.ExecContext(
 			ctx,
-			`INSERT INTO tabs (account_id, title, url, position) VALUES (?, ?, ?, ?);`,
+			`INSERT INTO tabs (account_id, title, url, position) VALUES ($1, $2, $3, $4);`,
 			accountID,
 			tab.Title,
 			tab.URL,
@@ -36,7 +36,7 @@ func InsertDefaultTabs(ctx context.Context, tx *sql.Tx, accountID int64) error {
 func GetTabs(ctx context.Context, db *sql.DB, accountID int64) ([]models.Tab, error) {
 	rows, err := db.QueryContext(
 		ctx,
-		`SELECT id, account_id, title, url, position FROM tabs WHERE account_id = ? ORDER BY position ASC;`,
+		`SELECT id, account_id, title, url, position FROM tabs WHERE account_id = $1 ORDER BY position ASC;`,
 		accountID,
 	)
 	if err != nil {
@@ -66,7 +66,7 @@ func CreateTab(ctx context.Context, db *sql.DB, accountID int64, title, url stri
 	var nextPos sql.NullInt64
 	if err := tx.QueryRowContext(
 		ctx,
-		`SELECT COALESCE(MAX(position), 0) + 1 FROM tabs WHERE account_id = ?;`,
+		`SELECT COALESCE(MAX(position), 0) + 1 FROM tabs WHERE account_id = $1;`,
 		accountID,
 	).Scan(&nextPos); err != nil {
 		tx.Rollback()
@@ -75,7 +75,7 @@ func CreateTab(ctx context.Context, db *sql.DB, accountID int64, title, url stri
 
 	result, err := tx.ExecContext(
 		ctx,
-		`INSERT INTO tabs (account_id, title, url, position) VALUES (?, ?, ?, ?);`,
+		`INSERT INTO tabs (account_id, title, url, position) VALUES ($1, $2, $3, $4);`,
 		accountID,
 		title,
 		url,
@@ -103,7 +103,7 @@ func CreateTab(ctx context.Context, db *sql.DB, accountID int64, title, url stri
 func UpdateTab(ctx context.Context, db *sql.DB, tabID, accountID int64, title, url string) (models.Tab, error) {
 	result, err := db.ExecContext(
 		ctx,
-		`UPDATE tabs SET title = ?, url = ? WHERE id = ? AND account_id = ?;`,
+		`UPDATE tabs SET title = $1, url = $2 WHERE id = $3 AND account_id = $4;`,
 		title,
 		url,
 		tabID,
@@ -120,7 +120,7 @@ func UpdateTab(ctx context.Context, db *sql.DB, tabID, accountID int64, title, u
 	var tab models.Tab
 	if err := db.QueryRowContext(
 		ctx,
-		`SELECT id, account_id, title, url, position FROM tabs WHERE id = ? AND account_id = ?;`,
+		`SELECT id, account_id, title, url, position FROM tabs WHERE id = $1 AND account_id = $2;`,
 		tabID,
 		accountID,
 	).Scan(&tab.ID, &tab.AccountID, &tab.Title, &tab.URL, &tab.Position); err != nil {
@@ -133,7 +133,7 @@ func UpdateTab(ctx context.Context, db *sql.DB, tabID, accountID int64, title, u
 func DeleteTab(ctx context.Context, db *sql.DB, tabID, accountID int64) error {
 	result, err := db.ExecContext(
 		ctx,
-		`DELETE FROM tabs WHERE id = ? AND account_id = ?;`,
+		`DELETE FROM tabs WHERE id = $1 AND account_id = $2;`,
 		tabID,
 		accountID,
 	)
@@ -161,7 +161,7 @@ func ReorderTabs(ctx context.Context, db *sql.DB, accountID int64, orderedIDs []
 	for idx, id := range orderedIDs {
 		if _, err := tx.ExecContext(
 			ctx,
-			`UPDATE tabs SET position = ? WHERE id = ? AND account_id = ?;`,
+			`UPDATE tabs SET position = $1 WHERE id = $2 AND account_id = $3;`,
 			idx+1,
 			id,
 			accountID,

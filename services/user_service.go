@@ -23,7 +23,7 @@ func CreateUser(email, password string) (*models.User, error) {
 		return nil, err
 	}
 
-	res, err := db.Exec("INSERT INTO users (email, password_hash) VALUES (?, ?)", email, string(hash))
+	res, err := db.Exec("INSERT INTO users (email, password_hash) VALUES ($1, $2)", email, string(hash))
 	if err != nil {
 		return nil, err
 	}
@@ -34,7 +34,7 @@ func CreateUser(email, password string) (*models.User, error) {
 
 func GetUserByEmail(email string) (*models.User, error) {
 	db := database.GetDB()
-	row := db.QueryRow("SELECT id, email, password_hash FROM users WHERE email = ?", email)
+	row := db.QueryRow("SELECT id, email, password_hash FROM users WHERE email = $1", email)
 	var u models.User
 	if err := row.Scan(&u.ID, &u.Email, &u.PasswordHash); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {

@@ -12,7 +12,7 @@ import (
 
 // ListAccounts returns accounts owned by the authenticated user.
 func ListAccounts(ctx context.Context, db *sql.DB, userID int64) ([]models.Account, error) {
-	rows, err := db.QueryContext(ctx, `SELECT id, user_id, label, netflix_email, status, chrome_profile, created_at FROM accounts WHERE user_id = ? ORDER BY created_at DESC;`, userID)
+	rows, err := db.QueryContext(ctx, `SELECT id, user_id, label, netflix_email, status, chrome_profile, created_at FROM accounts WHERE user_id = $1 ORDER BY created_at DESC;`, userID)
 	if err != nil {
 		return nil, fmt.Errorf("query accounts: %w", err)
 	}
@@ -38,7 +38,7 @@ func GetAccount(ctx context.Context, db *sql.DB, id, userID int64) (models.Accou
 	var created string
 	if err := db.QueryRowContext(
 		ctx,
-		`SELECT id, user_id, label, netflix_email, status, chrome_profile, created_at FROM accounts WHERE id = ? AND user_id = ?;`,
+		`SELECT id, user_id, label, netflix_email, status, chrome_profile, created_at FROM accounts WHERE id = $1 AND user_id = $2;`,
 		id,
 		userID,
 	).Scan(&acc.ID, &acc.UserID, &acc.Label, &acc.NetflixEmail, &acc.Status, &acc.ChromeProfile, &created); err != nil {
@@ -71,7 +71,7 @@ func CreateAccount(ctx context.Context, db *sql.DB, userID int64, label, email, 
 
 	result, err := tx.ExecContext(
 		ctx,
-		`INSERT INTO accounts (user_id, label, netflix_email, status, chrome_profile, created_at) VALUES (?, ?, ?, ?, ?, ?);`,
+		`INSERT INTO accounts (user_id, label, netflix_email, status, chrome_profile, created_at) VALUES ($1, $2, $3, $4, $5, $6);`,
 		userID,
 		label,
 		email,
@@ -122,7 +122,7 @@ func UpdateAccount(ctx context.Context, db *sql.DB, id, userID int64, label, ema
 
 	result, err := db.ExecContext(
 		ctx,
-		`UPDATE accounts SET label = ?, netflix_email = ?, status = ? WHERE id = ? AND user_id = ?;`,
+		`UPDATE accounts SET label = $1, netflix_email = $2, status = $3 WHERE id = $4 AND user_id = $5;`,
 		label,
 		email,
 		status,
@@ -142,12 +142,12 @@ func UpdateAccount(ctx context.Context, db *sql.DB, id, userID int64, label, ema
 
 // DeleteAccount removes an account owned by the user.
 func DeleteAccount(ctx context.Context, db *sql.DB, id, userID int64) error {
-	_, err := db.ExecContext(ctx, `DELETE FROM tabs WHERE account_id = ?;`, id)
+	_, err := db.ExecContext(ctx, `DELETE FROM tabs WHERE account_id = $1;`, id)
 	if err != nil {
 		return fmt.Errorf("delete tabs for account: %w", err)
 	}
 
-	result, err := db.ExecContext(ctx, `DELETE FROM accounts WHERE id = ? AND user_id = ?;`, id, userID)
+	result, err := db.ExecContext(ctx, `DELETE FROM accounts WHERE id = $1 AND user_id = $2;`, id, userID)
 	if err != nil {
 		return fmt.Errorf("delete account: %w", err)
 	}
